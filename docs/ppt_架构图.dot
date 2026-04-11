@@ -1,0 +1,63 @@
+digraph TestPipe_PPT_Architecture {
+    rankdir=TB;
+    graph [pad="0.35", ranksep="0.7", nodesep="0.45", bgcolor="white"];
+    node [shape=box, style="rounded,filled", fontname="Microsoft YaHei", fontsize=12, color="#555555"];
+    edge [fontname="Microsoft YaHei", fontsize=10, color="#6B7280", arrowsize=0.8];
+
+    UserInput [label="输入入口\nTestCase YAML / CLI", fillcolor="#FCE7F3", color="#DB2777", penwidth=1.8];
+    ResultOutput [label="结果输出\n日志 / 结果目录 / 可视化导出", fillcolor="#F3F4F6", color="#6B7280", penwidth=1.6];
+
+    subgraph cluster_core {
+        label="编排与执行核心";
+        style="rounded,filled";
+        color="#BFDBFE";
+        fillcolor="#EFF6FF";
+        penwidth=1.6;
+
+        Registry [label="PipelineRegistry\n定位并创建 Pipeline", fillcolor="#DBEAFE", color="#2563EB", penwidth=1.8];
+        Engine [label="TestEngine\n校验依赖 / 调度执行 / 汇总结果", fillcolor="#BFDBFE", color="#1D4ED8", penwidth=2.0];
+        Context [label="ExecutionContext\n输入注入 / 中间产物 / 共享状态", fillcolor="#E0F2FE", color="#0284C7", penwidth=1.6];
+    }
+
+    subgraph cluster_impl {
+        label="业务流程定义";
+        style="rounded,filled";
+        color="#FCD34D";
+        fillcolor="#FFFBEB";
+        penwidth=1.6;
+
+        Pipeline [label="Pipeline\n定义测试 DAG 与 forward 流程", fillcolor="#FEF3C7", color="#D97706", penwidth=1.8];
+        TestOp [label="TestOp\n可复用测试步骤单元", fillcolor="#DCFCE7", color="#16A34A", penwidth=1.8];
+    }
+
+    subgraph cluster_api {
+        label="统一能力接口";
+        style="rounded,filled";
+        color="#A7F3D0";
+        fillcolor="#ECFDF5";
+        penwidth=1.6;
+
+        OpAPI [label="OpAPI\n统一封装底层操作", fillcolor="#CCFBF1", color="#0F766E", penwidth=1.8];
+        SSH [label="SSH API", fillcolor="#F0FDFA", color="#0F766E"];
+        Transfer [label="Transfer API", fillcolor="#F0FDFA", color="#0F766E"];
+        Exec [label="Exec API", fillcolor="#F0FDFA", color="#0F766E"];
+        File [label="File API", fillcolor="#F0FDFA", color="#0F766E"];
+    }
+
+    UserInput -> Registry [label="解析用例并定位 Pipeline", penwidth=1.8, color="#DB2777"];
+    Registry -> Pipeline [label="实例化", penwidth=1.8];
+    UserInput -> Engine [label="发起执行", penwidth=1.8];
+    Engine -> Context [label="初始化上下文", penwidth=1.8];
+    Engine -> Pipeline [label="驱动运行", penwidth=2.0, color="#1D4ED8"];
+    Pipeline -> TestOp [label="按依赖顺序调用", penwidth=2.0, color="#D97706"];
+    TestOp -> Context [label="读写输入/输出", penwidth=1.6, color="#16A34A"];
+    TestOp -> OpAPI [label="调用统一接口", penwidth=2.0, color="#16A34A"];
+
+    OpAPI -> SSH [penwidth=1.4];
+    OpAPI -> Transfer [penwidth=1.4];
+    OpAPI -> Exec [penwidth=1.4];
+    OpAPI -> File [penwidth=1.4];
+
+    Engine -> ResultOutput [label="汇总状态与产物", penwidth=1.8, color="#4B5563"];
+    Pipeline -> ResultOutput [style=dashed, label="导出 DOT / ONNX", color="#9CA3AF"];
+}

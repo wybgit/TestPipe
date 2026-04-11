@@ -1,0 +1,66 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Local tool settings
+.claude/
+
+# Python cache / build
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Coverage / test reports
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+junit*.xml
+
+# Runtime artifacts for TestPipe / TGE
+.tge_work/
+.testpipe/
+runs/
+results/
+artifacts/
+logs/
+tmp/
+temp/
+
+# Generated reproduce / debug artifacts
+reproduce.sh
+*.trace.json
+*.debug.log
+
+# Documentation build outputs
+docs/build/
+docs/_build/
+site/
+
