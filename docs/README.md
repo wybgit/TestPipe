@@ -1,142 +1,91 @@
-# TestPipe测试框架 - 设计文档索引
+# TestPipe 文档索引
 
-## 框架命名
+## 1. 目录结构
 
-**TestPipe** = **Test Pipeline** (测试管道)
-
-- **Test** - 测试领域
-- **Pipe** - 管道化编排,体现测试流程的串联执行
-- 简单易记,读音顺口
-
----
-
-## 核心概念
-
-- **测试算子(TestOp)** - 测试步骤的抽象,类似AI算子
-- **Pipeline** - 测试流程,用Python代码定义(类似PyTorch的nn.Module)
-- **TestCase** - 测试用例,包含具体测试数据,用YAML描述
-- **测试引擎(TestEngine)** - 执行Pipeline的引擎
+```text
+docs/
+  requirements/     需求与范围
+  architecture/     架构与设计细节
+  guides/           用户与开发指南
+  review/           设计评审与优化建议
+  presentation/     PPT 与展示素材
+```
 
 ---
 
-## 设计文档
+## 2. 推荐阅读顺序
 
-### Phase 1 (MVP) - 核心框架
+### 需求侧
 
-| 文档 | 特性 | 状态 | 工作量 |
-|------|------|------|--------|
-| [00_总体设计.md](00_总体设计.md) | 框架总体架构 | ✅ 已完成 | - |
-| [01_测试算子框架.md](01_测试算子框架.md) | TestOp基类、注册机制、统一API | ✅ 已完成 | 3-4天 |
-| [02_Pipeline引擎.md](02_测试图引擎.md) | Pipeline、拓扑排序、执行引擎 | ✅ 已完成 | 3-4天 |
-| [03_Pipeline_Python实现.md](03_Pipeline_Python实现.md) | Pipeline Python实现(类似PyTorch) | ✅ 已完成 | 2-3天 |
-| [04_TestCase_YAML规范.md](04_TestCase_YAML规范.md) | TestCase YAML规范,参数化测试 | ✅ 已完成 | 2天 |
-| [05_Pipeline可视化导出.md](05_Pipeline可视化导出.md) | ONNX和DOT图导出 | ✅ 已完成 | 2天 |
+1. [原始需求](/home/wyb/AscendCode/TestPipe/docs/requirements/00_原始需求.md)
+2. [测试场景](/home/wyb/AscendCode/TestPipe/docs/requirements/01_测试场景.md)
+3. [软件需求说明书](/home/wyb/AscendCode/TestPipe/docs/requirements/02_软件需求说明书.md)
 
-### Phase 2 - 功能完善
+### 架构侧
 
-| 文档 | 特性 | 状态 | 工作量 |
-|------|------|------|--------|
-| [06_文档自动生成.md](06_文档自动生成.md) | API和算子文档自动生成 | ✅ 已完成 | 2-3天 |
+1. [总体设计](/home/wyb/AscendCode/TestPipe/docs/architecture/00_总体设计.md)
+2. [测试算子框架](/home/wyb/AscendCode/TestPipe/docs/architecture/01_测试算子框架.md)
+3. [测试图引擎](/home/wyb/AscendCode/TestPipe/docs/architecture/02_测试图引擎.md)
+4. [Pipeline Python 实现](/home/wyb/AscendCode/TestPipe/docs/architecture/03_Pipeline_Python实现.md)
+5. [TestCase YAML 规范](/home/wyb/AscendCode/TestPipe/docs/architecture/04_TestCase_YAML规范.md)
+6. [Pipeline 可视化导出](/home/wyb/AscendCode/TestPipe/docs/architecture/05_Pipeline可视化导出.md)
+7. [文档自动生成](/home/wyb/AscendCode/TestPipe/docs/architecture/06_文档自动生成.md)
+8. [核心对象模型设计](/home/wyb/AscendCode/TestPipe/docs/architecture/07_核心对象模型设计.md)
+9. [执行与追踪机制设计](/home/wyb/AscendCode/TestPipe/docs/architecture/08_执行与追踪机制设计.md)
 
-### 设计评审
+### 指南侧
 
-| 文档 | 内容 | 状态 |
-|------|------|------|
-| [07_架构优化建议.md](07_架构优化建议.md) | 基于需求和现有设计的架构优化建议 | ✅ 已完成 |
+- [用户指南](/home/wyb/AscendCode/TestPipe/docs/guides/user/用户指南_平台使用.md)
+- [开发总览](/home/wyb/AscendCode/TestPipe/docs/guides/developer/00_开发总览.md)
+- [自定义测试算子](/home/wyb/AscendCode/TestPipe/docs/guides/developer/01_自定义测试算子.md)
+- [自定义 API 与 Action 扩展](/home/wyb/AscendCode/TestPipe/docs/guides/developer/02_自定义API与Action扩展.md)
 
-### 用户指南
+### 评审与展示
 
-| 文档 | 内容 | 状态 |
-|------|------|------|
-| [用户指南_平台使用.md](用户指南_平台使用.md) | 平台使用方法、CLI命令、内置算子 | ✅ 已完成 |
-
-### 开发指南
-
-| 文档 | 内容 | 状态 |
-|------|------|------|
-| [开发指南_自定义测试算子.md](开发指南_自定义测试算子.md) | 自定义测试算子开发说明 | ✅ 已完成 |
-| [开发指南_自定义API.md](开发指南_自定义API.md) | 自定义API开发说明 | ✅ 已完成 |
-
-### 架构图
-
-| 图表 | 内容 | 格式 | 状态 |
-|------|------|------|------|
-| [架构图](architecture.png) | 系统架构图 | DOT/PNG | ✅ 已完成 |
-| [时序图](sequence.png) | 测试执行时序图 | DOT/PNG | ✅ 已完成 |
-| [图表说明](图表说明.md) | DOT源文件和使用说明 | - | ✅ 已完成 |
+- [架构优化建议](/home/wyb/AscendCode/TestPipe/docs/review/07_架构优化建议.md)
+- [PPT 展示版](/home/wyb/AscendCode/TestPipe/docs/presentation/PPT展示_系统架构与接口时序.md)
 
 ---
 
-## 术语对照
+## 3. 当前文档分层说明
 
-| TestPipe术语 | 说明 | 对应AI编译器概念 |
-|-------------|------|------------------|
-| TestOp | 测试算子 | Operator |
-| Pipeline | 测试管道 | Computation Graph |
-| TestCase | 测试用例 | Input Tensor |
-| TestEngine | 测试引擎 | Runtime |
-| Node | 测试节点 | Graph Node |
-| Op_Type | 算子类型 | Op Type |
+### requirements
 
----
+放需求、边界、测试场景和重构后的软件需求说明，回答“为什么做”和“必须做到什么”。
 
-## 快速导航
+### architecture
 
-### 我想了解TestPipe
-→ 阅读 [00_总体设计.md](00_总体设计.md)  
-→ 查看 [架构图](architecture.png)
+放架构方案、执行模型、导出方式和文档机制，回答“系统应该怎么设计”。
 
-### 我想使用TestPipe
-→ 阅读 [用户指南_平台使用.md](用户指南_平台使用.md)
+### guides
 
-### 我想开发自定义算子
-→ 阅读 [开发指南_自定义测试算子.md](开发指南_自定义测试算子.md)
+放用户和开发者视角的操作说明，回答“怎么用”和“怎么扩展”。
 
-### 我想扩展API
-→ 阅读 [开发指南_自定义API.md](开发指南_自定义API.md)
+### review
 
-### 我想了解Pipeline实现
-→ 阅读 [03_Pipeline_Python实现.md](03_Pipeline_Python实现.md)
+放评审意见、风险和优化方向，回答“现有设计哪里需要收敛”。
 
-### 我想了解TestCase格式
-→ 阅读 [04_TestCase_YAML规范.md](04_TestCase_YAML规范.md)
+### presentation
 
-### 我想了解执行流程
-→ 查看 [时序图](sequence.png)
+放用于汇报和展示的 PPT 素材、Mermaid、DOT 和图文件。
 
 ---
 
-## 核心特性
+## 4. 维护规则
 
-### ✅ Pipeline Python实现
-- 类似PyTorch的nn.Module
-- 代码即配置,IDE支持
-- 灵活组合,支持if/for/函数
-- 自动注册为内置Pipeline
+- 需求变更先改 `requirements`
+- 架构方案变更再改 `architecture`
+- 对外使用方式和扩展方式变更同步改 `guides`
+- 评审结论统一沉淀在 `review`
 
-### ✅ TestCase YAML格式
-- 引用Python定义的Pipeline
-- 支持参数化测试
-- 多Pipeline共享输入
-- 结果按TestCase维度保存
-
-### ✅ 算子可调用
-- 算子支持__call__
-- 像函数一样使用
-- 自动处理输入输出
-
-### ✅ 可视化
-- 导出ONNX模型(Netron查看)
-- 导出DOT图(Graphviz渲染)
-
-### ✅ 文档自动生成
-- API文档自动生成
-- 算子文档自动生成
-- Web展示
+不要在不同目录中维护相互冲突的两套主模型。
 
 ---
 
-**文档版本**: v3.0
-- **创建日期**: 2026-04-11
-- **最后更新**: 2026-04-11
-- **维护团队**: TestPipe设计团队
+## 5. 当前重点结论
+
+- 统一采用“Python DSL 编写 + PipelineSpec 执行”的主路径
+- `TestEngine` 是唯一执行入口
+- `TestOp` 必须有强类型契约
+- 所有外部副作用统一走 Action / Provider 层
+- 运行结果必须沉淀到 case 级工作空间

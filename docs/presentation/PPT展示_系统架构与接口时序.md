@@ -2,7 +2,9 @@
 
 ## 系统架构图
 
-![PPT系统架构图](ppt_架构图.png)
+可直接使用矢量图:
+
+![PPT系统架构图](assets/ppt_架构图.svg)
 
 ### 讲解重点
 
@@ -13,7 +15,7 @@
 
 ## 接口调用时序图
 
-下面改为 Mermaid 精简版，适合直接贴到支持 Mermaid 的 PPT/Markdown 工具中展示。
+下面使用 Mermaid 精简版，适合直接贴到支持 Mermaid 的 PPT/Markdown 工具中展示。
 
 ```mermaid
 sequenceDiagram
@@ -46,3 +48,8 @@ sequenceDiagram
 - 中间段聚焦执行: `TestEngine` 驱动 `Pipeline`
 - 核心链路聚焦接口调用: `TestOp -> OpAPI -> 底层能力`
 - 结果统一回收: 执行结果回到 `TestEngine` 对外输出
+
+### 相关素材
+
+- Mermaid 源文件: `assets/ppt_接口调用时序图.mmd`
+- DOT 源文件: `assets/ppt_接口调用时序图.dot`
