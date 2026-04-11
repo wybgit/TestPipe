@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "testpipe"
+version = "0.1.0"
+description = "Pipeline-based NPU test orchestration framework"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML>=6.0",
+]
+
+[project.scripts]
+testpipe = "testpipe.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["testpipe"]

@@ -48,6 +48,7 @@ junit*.xml
 .tge_work/
 .testpipe/
 runs/
+runs*/
 results/
 artifacts/
 logs/
@@ -63,4 +64,3 @@ reproduce.sh
 docs/build/
 docs/_build/
 site/
-

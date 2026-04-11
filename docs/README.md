@@ -32,6 +32,7 @@ docs/
 7. [文档自动生成](/home/wyb/AscendCode/TestPipe/docs/architecture/06_文档自动生成.md)
 8. [核心对象模型设计](/home/wyb/AscendCode/TestPipe/docs/architecture/07_核心对象模型设计.md)
 9. [执行与追踪机制设计](/home/wyb/AscendCode/TestPipe/docs/architecture/08_执行与追踪机制设计.md)
+10. [LLM 原生模板与 Skills 设计](/home/wyb/AscendCode/TestPipe/docs/architecture/09_LLM原生模板与Skills设计.md)
 
 ### 指南侧
 
@@ -39,6 +40,7 @@ docs/
 - [开发总览](/home/wyb/AscendCode/TestPipe/docs/guides/developer/00_开发总览.md)
 - [自定义测试算子](/home/wyb/AscendCode/TestPipe/docs/guides/developer/01_自定义测试算子.md)
 - [自定义 API 与 Action 扩展](/home/wyb/AscendCode/TestPipe/docs/guides/developer/02_自定义API与Action扩展.md)
+- [LLM 模板与 Skills 使用指南](/home/wyb/AscendCode/TestPipe/docs/guides/developer/03_LLM模板与Skills使用指南.md)
 
 ### 评审与展示
 
@@ -89,3 +91,18 @@ docs/
 - `TestOp` 必须有强类型契约
 - 所有外部副作用统一走 Action / Provider 层
 - 运行结果必须沉淀到 case 级工作空间
+
+## 6. 当前冻结决策
+
+- `PipelineSpec` 是唯一执行真相源
+- `TestEngine` 是唯一执行入口
+- 所有外部副作用统一经过 `ActionRunner`
+
+## 7. 当前开发起点
+
+当前基础开发优先打通:
+
+- `YAML Case -> PipelineSpec -> TestEngine -> runs/`
+- 本机 Host 执行
+- 最小内置算子与示例 Pipeline
+- trace、summary、artifacts 基础沉淀

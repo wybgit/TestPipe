@@ -1,0 +1,10 @@
+test_case:
+  case_id: smoke_case
+  name: SmokePipeline_Basic
+  pipeline: SmokePipeline
+  inputs:
+    message: "hello testpipe"
+  expected:
+    echoed_message: "hello testpipe"
+  tags: [smoke, bootstrap]
+  priority: P0
