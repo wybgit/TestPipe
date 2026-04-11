@@ -22,6 +22,27 @@
 - 检查通过后再执行
 - 结果分析优先读取结构化产物
 
+## 2.1 当前 CLI 入口
+
+当前版本已经提供以下命令:
+
+```bash
+testpipe list-templates
+testpipe show-template case-template
+testpipe list-skills
+testpipe show-skill case-runner --json
+testpipe run-skill case-generator examples/templates/generate_case_smoke.yaml --json
+testpipe run-skill case-checker examples/templates/check_case_smoke.yaml --json
+testpipe run-skill case-runner examples/templates/run_case_smoke.yaml --json
+```
+
+说明:
+
+- `run-skill` 默认把结构化结果输出到标准输出
+- `case-runner` 在 `execute: false` 时只返回执行计划
+- `case-runner` 在 `execute: true` 时会实际调用 `TestEngine`
+- 为保证 `--json` 可被脚本消费，执行阶段日志会收敛到 `execution_console_log` 字段
+
 ---
 
 ## 3. 节点生成
@@ -217,6 +238,21 @@ priority: P0
 3. 获取执行命令或执行计划
 4. 交给 `TestEngine`
 
+### 7.4 当前运行返回结构
+
+`case-runner` 当前会输出:
+
+- `run_command`
+- `run_plan_summary`
+- `result_location`
+- `summary`
+- `execution_console_log`
+
+其中:
+
+- `execute: false` 时，只返回命令和计划
+- `execute: true` 时，会额外返回运行目录、结果摘要和执行阶段日志
+
 ---
 
 ## 8. 结果分析
@@ -237,6 +273,22 @@ priority: P0
 1. 填写分析模板
 2. 调用 `result-analyzer`
 3. 读取根因、证据链和修复建议
+
+### 8.4 当前分析返回结构
+
+`result-analyzer` 当前输出:
+
+- `analysis_report`
+- `root_cause`
+- `fix_suggestions`
+
+其中 `analysis_report` 至少包含:
+
+- `status`
+- `failed_step`
+- `retryability`
+- `evidence.issues`
+- `evidence.failed_log_lines`
 
 ### 8.4 输出重点
 

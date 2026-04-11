@@ -12,6 +12,7 @@ from testpipe.spec import PortSpec
 class StepDefinition:
     name: str
     op: object
+    stage: str | None = None
 
 
 @dataclass(slots=True)
@@ -34,6 +35,7 @@ class Pipeline(ABC):
         self.outputs: list[PortSpec] = []
         self.steps: list[StepDefinition] = []
         self.edges: list[EdgeDefinition] = []
+        self.current_stage: str | None = None
         self.define()
 
     @abstractmethod
@@ -46,8 +48,11 @@ class Pipeline(ABC):
     def set_outputs(self, *ports: PortSpec) -> None:
         self.outputs = list(ports)
 
-    def add_step(self, name: str, op: object) -> None:
-        self.steps.append(StepDefinition(name=name, op=op))
+    def set_stage(self, stage_name: str | None) -> None:
+        self.current_stage = stage_name
+
+    def add_step(self, name: str, op: object, *, stage: str | None = None) -> None:
+        self.steps.append(StepDefinition(name=name, op=op, stage=stage or self.current_stage))
 
     def connect(self, source: str, target: str) -> None:
         source_node, source_port = source.split(".", 1)

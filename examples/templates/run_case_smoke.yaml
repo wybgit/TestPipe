@@ -1,0 +1,4 @@
+case_ref: examples/testcases/smoke.yaml
+output_dir: runs
+debug: false
+execute: false

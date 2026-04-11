@@ -21,6 +21,7 @@ class ExecutionPlanner:
     def build(self, pipeline_spec) -> list[ExecutionStep]:
         node_names = [node.name for node in pipeline_spec.nodes]
         node_map = {node.name: node for node in pipeline_spec.nodes}
+        node_order = {name: index for index, name in enumerate(node_names)}
         dependencies: dict[str, set[str]] = {name: set() for name in node_names}
 
         for edge in pipeline_spec.edges:
@@ -29,7 +30,7 @@ class ExecutionPlanner:
             dependencies[edge.target_node].add(edge.source_node)
 
         ordered: list[str] = []
-        ready = sorted(name for name, deps in dependencies.items() if not deps)
+        ready = sorted((name for name, deps in dependencies.items() if not deps), key=node_order.__getitem__)
         while ready:
             current = ready.pop(0)
             ordered.append(current)
@@ -38,7 +39,7 @@ class ExecutionPlanner:
                     deps.remove(current)
                     if not deps and candidate not in ordered and candidate not in ready:
                         ready.append(candidate)
-                        ready.sort()
+                        ready.sort(key=node_order.__getitem__)
 
         if len(ordered) != len(node_names):
             raise ValidationError("pipeline contains a cycle")

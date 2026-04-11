@@ -1,0 +1,2 @@
+pipeline_spec_ref: SmokePipeline
+case_ref: examples/testcases/smoke.yaml

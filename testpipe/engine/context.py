@@ -33,12 +33,13 @@ class MappingView:
 class ExecutionContext:
     """Case-scoped execution state."""
 
-    def __init__(self, *, case_spec, pipeline_spec, env_profile, run_dir: Path, trace_recorder) -> None:
+    def __init__(self, *, case_spec, pipeline_spec, env_profile, run_dir: Path, trace_recorder, debug: bool) -> None:
         self.case_spec = case_spec
         self.pipeline_spec = pipeline_spec
         self.env_profile = env_profile
         self.run_dir = run_dir
         self.trace_recorder = trace_recorder
+        self.debug = debug
         self.artifact_store = ArtifactStore(run_dir / "artifacts")
         self.shared_data: dict[str, Any] = dict(case_spec.inputs)
         self.node_outputs: dict[str, dict[str, Any]] = {}
@@ -49,6 +50,8 @@ class ExecutionContext:
 
     def write_snapshot(self) -> None:
         self.run_dir.mkdir(parents=True, exist_ok=True)
+        if not self.debug:
+            return
         (self.run_dir / "case_spec.yaml").write_text(
             yaml.safe_dump(self.case_spec.to_dict(), allow_unicode=True, sort_keys=False),
             encoding="utf-8",
@@ -76,6 +79,7 @@ class StepContext:
     host: HostExecutor
     artifacts: ArtifactStore
     logger_name: str
+    debug: bool
 
     def to_step_record(self, *, status: str, op_type: str, outputs: dict[str, Any], duration_ms: int) -> dict[str, Any]:
         return {

@@ -14,6 +14,7 @@ class PortSpec:
     description: str = ""
     artifact_kind: str | None = None
     default: Any | None = None
+    expose: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -62,6 +63,7 @@ class NodeSpec:
     name: str
     op_type: str
     op_version: str | None = None
+    stage: str | None = None
     attrs: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -120,6 +122,57 @@ class CaseSpec:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class TemplateSpec:
+    name: str
+    task_type: str
+    version: str = "1.0"
+    description: str = ""
+    body: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class SkillSpec:
+    name: str
+    category: str
+    template_name: str
+    version: str = "1.0"
+    description: str = ""
+    contract: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class IssueSpec:
+    level: str
+    field: str
+    message: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class CaseCheckReport:
+    status: str
+    issues: list[IssueSpec] = field(default_factory=list)
+    fix_suggestions: list[str] = field(default_factory=list)
+    normalized_case: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "issues": [item.to_dict() for item in self.issues],
+            "fix_suggestions": self.fix_suggestions,
+            "normalized_case": self.normalized_case,
+        }
 
 
 @dataclass(slots=True)

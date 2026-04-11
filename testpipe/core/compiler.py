@@ -24,6 +24,7 @@ class PipelineCompiler:
                     name=step.name,
                     op_type=spec.op_type,
                     op_version=spec.version,
+                    stage=step.stage,
                     attrs=step.op.resolved_attrs(),
                 )
             )
@@ -46,5 +47,7 @@ class PipelineCompiler:
             outputs=pipeline.outputs,
             nodes=nodes,
             edges=edges,
-            metadata={},
+            metadata={
+                "stages": [step.stage for step in pipeline.steps if step.stage],
+            },
         )

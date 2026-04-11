@@ -1,0 +1,225 @@
+"""Runtime tests for skill execution handlers."""
+
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from io import StringIO
+from pathlib import Path
+
+import yaml
+
+from testpipe import bootstrap
+from testpipe.cli.main import main
+from testpipe.skills import SkillRunner
+
+
+class SkillRuntimeTest(unittest.TestCase):
+    def test_case_generator_builds_case_spec_and_yaml(self) -> None:
+        bootstrap()
+        result = SkillRunner().run(
+            "case-generator",
+            {
+                "case_name": "Smoke Generated",
+                "target_pipeline": "SmokePipeline",
+                "inputs": {"message": "hi"},
+                "expected": {"echoed_message": "hi"},
+                "tags": ["generated"],
+            },
+        )
+        self.assertEqual(result["case_spec"]["pipeline"], "SmokePipeline")
+        self.assertIn("test_case:", result["yaml_case_draft"])
+
+    def test_pipeline_generator_outputs_mermaid_and_draft_spec(self) -> None:
+        bootstrap()
+        result = SkillRunner().run(
+            "pipeline-generator",
+            {
+                "pipeline_name": "GeneratedPipeline",
+                "business_goal": "compile and transfer",
+                "pipeline_inputs": ["resource_path"],
+                "pipeline_outputs": ["remote_path"],
+                "stages": [{"name": "prepare"}, {"name": "compile"}, {"name": "transfer"}],
+                "required_ops": ["EnvCheck", "ATCCompile", "Transfer"],
+            },
+        )
+        self.assertEqual(result["pipeline_spec"]["name"], "GeneratedPipeline")
+        self.assertIn("flowchart LR", result["mermaid_graph"])
+        self.assertIn("self.set_stage('prepare')", result["python_pipeline_draft"])
+
+    def test_test_op_generator_can_scaffold_files(self) -> None:
+        bootstrap()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result = SkillRunner().run(
+                "test-op-generator",
+                {
+                    "op_name": "PathExistsCheck",
+                    "op_category": "check",
+                    "business_goal": "check whether a path exists",
+                    "inputs": [{"name": "target_path", "type": "artifact:path", "description": "path to inspect"}],
+                    "outputs": [{"name": "path_exists", "type": "bool", "description": "path existence result"}],
+                    "scaffold": {
+                        "enabled": True,
+                        "root_dir": tmp_dir,
+                    },
+                },
+            )
+            self.assertEqual(len(result["written_files"]), 4)
+            self.assertTrue((Path(tmp_dir) / "ops" / "path_exists_check.py").exists())
+            self.assertTrue((Path(tmp_dir) / "tests" / "test_path_exists_check.py").exists())
+            self.assertTrue((Path(tmp_dir) / "docs" / "ops" / "path_exists_check.md").exists())
+
+    def test_pipeline_generator_can_scaffold_files(self) -> None:
+        bootstrap()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result = SkillRunner().run(
+                "pipeline-generator",
+                {
+                    "pipeline_name": "AutoCompilePipeline",
+                    "business_goal": "fetch, compile, and transfer model",
+                    "pipeline_inputs": ["resource_path"],
+                    "pipeline_outputs": ["remote_path"],
+                    "stages": [{"name": "prepare"}, {"name": "compile"}, {"name": "transfer"}],
+                    "required_ops": ["ResourceFetch", "ATCCompile", "Transfer"],
+                    "scaffold": {
+                        "enabled": True,
+                        "root_dir": tmp_dir,
+                    },
+                },
+            )
+            self.assertEqual(len(result["written_files"]), 3)
+            self.assertTrue((Path(tmp_dir) / "pipelines" / "auto_compile_pipeline.py").exists())
+            self.assertTrue((Path(tmp_dir) / "docs" / "pipelines" / "auto_compile_pipeline.mmd").exists())
+            self.assertTrue((Path(tmp_dir) / "docs" / "pipelines" / "auto_compile_pipeline.pipeline.json").exists())
+
+    def test_case_runner_can_execute_case(self) -> None:
+        bootstrap()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result = SkillRunner().run(
+                "case-runner",
+                {
+                    "case_ref": "examples/testcases/smoke.yaml",
+                    "output_dir": tmp_dir,
+                    "execute": True,
+                },
+            )
+            self.assertIsNotNone(result["result_location"])
+            self.assertEqual(result["summary"]["status"], "passed")
+            self.assertTrue((Path(result["result_location"]) / "summary.json").exists())
+
+    def test_result_analyzer_reports_failure_root_cause(self) -> None:
+        bootstrap()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            bad_case = {
+                "test_case": {
+                    "case_id": "bad_expect",
+                    "name": "BadExpect",
+                    "pipeline": "SmokePipeline",
+                    "inputs": {"message": "hello"},
+                    "expected": {"echoed_message": "wrong"},
+                }
+            }
+            case_file = Path(tmp_dir) / "bad_case.yaml"
+            case_file.write_text(yaml.safe_dump(bad_case, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            run_result = SkillRunner().run(
+                "case-runner",
+                {
+                    "case_ref": str(case_file),
+                    "output_dir": tmp_dir,
+                    "execute": True,
+                },
+            )
+            summary_ref = Path(str(run_result["result_location"])) / "summary.json"
+            analysis = SkillRunner().run("result-analyzer", {"summary_ref": str(summary_ref)})
+            self.assertIn("echoed_message expected", analysis["root_cause"])
+            self.assertTrue(analysis["fix_suggestions"])
+
+    def test_run_skill_cli_outputs_json(self) -> None:
+        bootstrap()
+        payload = {
+            "case_name": "CLI Generated",
+            "target_pipeline": "SmokePipeline",
+            "inputs": {"message": "cli"},
+            "expected": {"echoed_message": "cli"},
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            payload_file = Path(tmp_dir) / "generate_case.yaml"
+            payload_file.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                exit_code = main(["run-skill", "case-generator", str(payload_file), "--json"])
+            self.assertEqual(exit_code, 0)
+            result = json.loads(buffer.getvalue())
+            self.assertEqual(result["case_spec"]["pipeline"], "SmokePipeline")
+
+    def test_run_skill_cli_can_check_case(self) -> None:
+        bootstrap()
+        payload = {
+            "pipeline_spec_ref": "SmokePipeline",
+            "case_spec": {
+                "name": "InlineCase",
+                "case_id": "inline_case",
+                "pipeline": "SmokePipeline",
+                "inputs": {"message": "hello"},
+                "expected": {"echoed_message": "hello"},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            payload_file = Path(tmp_dir) / "check_case.yaml"
+            payload_file.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                exit_code = main(["run-skill", "case-checker", str(payload_file), "--json"])
+            self.assertEqual(exit_code, 0)
+            result = json.loads(buffer.getvalue())
+            self.assertEqual(result["status"], "pass")
+
+    def test_run_skill_cli_can_execute_case_runner_with_clean_json(self) -> None:
+        bootstrap()
+        payload = {
+            "case_ref": "examples/testcases/smoke.yaml",
+            "output_dir": "runs",
+            "execute": True,
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            payload["output_dir"] = tmp_dir
+            payload_file = Path(tmp_dir) / "run_case.yaml"
+            payload_file.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                exit_code = main(["run-skill", "case-runner", str(payload_file), "--json"])
+            self.assertEqual(exit_code, 0)
+            result = json.loads(buffer.getvalue())
+            self.assertEqual(result["summary"]["status"], "passed")
+            self.assertTrue(result["execution_console_log"])
+
+    def test_run_skill_cli_can_scaffold_pipeline_files(self) -> None:
+        bootstrap()
+        payload = {
+            "pipeline_name": "ScaffoldPipeline",
+            "business_goal": "generated pipeline",
+            "pipeline_inputs": ["message"],
+            "pipeline_outputs": ["echoed_message"],
+            "stages": [{"name": "prepare"}, {"name": "execute"}],
+            "required_ops": ["EnvCheck", "Echo"],
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            payload["scaffold"] = {
+                "enabled": True,
+                "root_dir": tmp_dir,
+            }
+            payload_file = Path(tmp_dir) / "generate_pipeline.yaml"
+            payload_file.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                exit_code = main(["run-skill", "pipeline-generator", str(payload_file), "--json"])
+            self.assertEqual(exit_code, 0)
+            result = json.loads(buffer.getvalue())
+            self.assertTrue(result["written_files"])
+            self.assertTrue((Path(tmp_dir) / "pipelines" / "scaffold_pipeline.py").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

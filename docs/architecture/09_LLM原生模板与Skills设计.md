@@ -286,6 +286,19 @@ recommendations: []
 6. `result-analyzer`
 7. `workflow-orchestrator`
 
+### 当前实现状态
+
+当前代码已经落地以下基础能力:
+
+- `Template Registry`
+- `Skill Registry`
+- `run-skill` CLI 入口
+- `case-checker` 静态校验
+- `case-runner` 结构化执行计划与可选实际执行
+- `result-analyzer` 对 `summary.json` 和 `execution.log` 的结构化分析
+
+当前阶段的重点是先把模板填充后的消费链路打通，再逐步接入真实大模型与更复杂的 workflow orchestration。
+
 ---
 
 ## 5.2 test-op-generator

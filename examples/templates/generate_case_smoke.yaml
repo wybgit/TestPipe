@@ -1,0 +1,12 @@
+case_name: Smoke Auto Case
+target_pipeline: SmokePipeline
+test_goal: 生成一个最小 smoke 用例
+inputs:
+  message: hello from template
+expected:
+  echoed_message: hello from template
+tags:
+  - generated
+  - smoke
+priority: P1
+environment_hint: local
