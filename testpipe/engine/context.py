@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from testpipe.infra import ArtifactStore, HostExecutor
+from testpipe.infra import ArtifactStore, DeviceExecutor, HostExecutor, TransferExecutor
 
 
 class MappingView:
@@ -40,7 +40,7 @@ class ExecutionContext:
         self.run_dir = run_dir
         self.trace_recorder = trace_recorder
         self.debug = debug
-        self.artifact_store = ArtifactStore(run_dir / "artifacts")
+        self.artifact_store = ArtifactStore(run_dir / "resources")
         self.shared_data: dict[str, Any] = dict(case_spec.inputs)
         self.node_outputs: dict[str, dict[str, Any]] = {}
 
@@ -77,6 +77,8 @@ class StepContext:
     inputs: MappingView
     attrs: MappingView
     host: HostExecutor
+    device: DeviceExecutor | None
+    transfer: TransferExecutor | None
     artifacts: ArtifactStore
     logger_name: str
     debug: bool

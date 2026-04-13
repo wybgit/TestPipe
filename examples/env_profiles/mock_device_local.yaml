@@ -1,0 +1,13 @@
+env_profile:
+  host:
+    mode: local
+  device:
+    protocol: mock
+    host: mock-device
+    port: 22
+    user: root
+  transport:
+    mode: mock
+    size_threshold_mb: 16
+  metadata:
+    profile_name: mock_device_local

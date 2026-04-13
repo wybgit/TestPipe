@@ -10,7 +10,7 @@ import yaml
 from testpipe import bootstrap
 from testpipe.core import PipelineCompiler, create_pipeline, list_pipelines
 from testpipe.engine import TestEngine
-from testpipe.loaders import StructuredLoader, TestCaseLoader
+from testpipe.loaders import EnvProfileLoader, StructuredLoader, TestCaseLoader
 from testpipe.spec import EnvProfile
 from testpipe.skills import SkillRunner, get_skill, list_skills
 from testpipe.templates import get_template, list_templates
@@ -24,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Run a YAML test case")
     run_parser.add_argument("case_file")
     run_parser.add_argument("--output-root", default="runs")
+    run_parser.add_argument("--env-profile", default=None, help="YAML/JSON env profile file; defaults to local_default")
     run_parser.add_argument("--debug", action="store_true", help="Write debug snapshots, step records, trace, and reproduce script")
 
     check_case_parser = subparsers.add_parser("check-case", help="Validate a YAML test case against its pipeline contract")
@@ -115,12 +116,12 @@ def main(argv: list[str] | None = None) -> int:
         case = TestCaseLoader().load(args.case_file)
         pipeline = create_pipeline(case.pipeline)
         pipeline_spec = PipelineCompiler().compile(pipeline)
-        summary = TestEngine(output_root=args.output_root, debug=args.debug).execute(
+        env_profile = EnvProfile.local_default() if args.env_profile is None else EnvProfileLoader().load(args.env_profile)
+        TestEngine(output_root=args.output_root, debug=args.debug).execute(
             case_spec=case,
             pipeline_spec=pipeline_spec,
-            env_profile=EnvProfile.local_default(),
+            env_profile=env_profile,
         )
-        print(json.dumps(summary.to_dict(), indent=2, ensure_ascii=False))
         return 0
 
     if args.command == "check-case":

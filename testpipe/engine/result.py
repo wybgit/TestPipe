@@ -10,16 +10,28 @@ from typing import Any
 @dataclass(slots=True)
 class ResultSummary:
     case_id: str
+    case_name: str
     pipeline: str
     status: str
-    started_at: str
-    ended_at: str
     duration_ms: int
-    outputs: dict[str, Any]
+    run_dir: str
+    outputs: dict[str, Any] = field(default_factory=dict)
+    started_at: str = ""
+    ended_at: str = ""
     failed_step: str | None = None
     issues: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        return {
+            "case_id": self.case_id,
+            "case_name": self.case_name,
+            "pipeline": self.pipeline,
+            "status": self.status,
+            "duration_ms": self.duration_ms,
+            "run_dir": self.run_dir,
+        }
+
+    def to_internal_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 

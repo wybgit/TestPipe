@@ -109,6 +109,46 @@ class SkillRuntimeTest(unittest.TestCase):
             self.assertEqual(result["summary"]["status"], "passed")
             self.assertTrue((Path(result["result_location"]) / "summary.json").exists())
 
+    def test_case_runner_loads_env_profile_file(self) -> None:
+        bootstrap()
+        env_profile = {
+            "env_profile": {
+                "host": {
+                    "mode": "docker",
+                    "workdir": "/workspace/testpipe",
+                    "docker_image": "testpipe:latest",
+                },
+                "device": {
+                    "protocol": "ssh",
+                    "host": "192.168.1.10",
+                    "port": 22,
+                    "user": "root",
+                },
+                "transport": {
+                    "mode": "sftp",
+                    "size_threshold_mb": 128,
+                },
+                "metadata": {
+                    "profile_name": "remote_mock",
+                },
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            env_file = Path(tmp_dir) / "env.yaml"
+            env_file.write_text(yaml.safe_dump(env_profile, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            result = SkillRunner().run(
+                "case-runner",
+                {
+                    "case_ref": "examples/testcases/smoke.yaml",
+                    "output_dir": tmp_dir,
+                    "env_profile": str(env_file),
+                    "execute": False,
+                },
+            )
+            self.assertEqual(result["run_plan_summary"]["env_profile"]["host"]["mode"], "docker")
+            self.assertEqual(result["run_plan_summary"]["env_profile"]["device"]["host"], "192.168.1.10")
+            self.assertIn("--env-profile", result["run_command"])
+
     def test_result_analyzer_reports_failure_root_cause(self) -> None:
         bootstrap()
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -219,6 +259,47 @@ class SkillRuntimeTest(unittest.TestCase):
             result = json.loads(buffer.getvalue())
             self.assertTrue(result["written_files"])
             self.assertTrue((Path(tmp_dir) / "pipelines" / "scaffold_pipeline.py").exists())
+
+    def test_run_cli_accepts_env_profile_file(self) -> None:
+        bootstrap()
+        env_profile = {
+            "env_profile": {
+                "host": {
+                    "mode": "docker",
+                    "workdir": "/workspace/testpipe",
+                    "docker_image": "testpipe:latest",
+                },
+                "transport": {
+                    "mode": "local",
+                    "size_threshold_mb": 64,
+                },
+                "metadata": {
+                    "profile_name": "local_docker",
+                },
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            env_file = Path(tmp_dir) / "env.yaml"
+            env_file.write_text(yaml.safe_dump(env_profile, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                exit_code = main(
+                    [
+                        "run",
+                        "examples/testcases/smoke.yaml",
+                        "--output-root",
+                        tmp_dir,
+                        "--env-profile",
+                        str(env_file),
+                        "--debug",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            run_dirs = [path for path in Path(tmp_dir).iterdir() if path.is_dir()]
+            self.assertEqual(len(run_dirs), 1)
+            env_snapshot = json.loads((run_dirs[0] / "env_profile.json").read_text(encoding="utf-8"))
+            self.assertEqual(env_snapshot["host"]["mode"], "docker")
+            self.assertEqual(env_snapshot["metadata"]["profile_name"], "local_docker")
 
 
 if __name__ == "__main__":

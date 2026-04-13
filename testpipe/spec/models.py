@@ -181,6 +181,15 @@ class HostConfig:
     workdir: str | None = None
     docker_image: str | None = None
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any] | None) -> "HostConfig":
+        payload = payload or {}
+        return cls(
+            mode=payload.get("mode", "local"),
+            workdir=payload.get("workdir"),
+            docker_image=payload.get("docker_image"),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -191,6 +200,25 @@ class DeviceConfig:
     host: str = ""
     port: int = 22
     user: str = "root"
+    workdir: str | None = None
+    remote_root: str | None = None
+    ssh_options: list[str] = field(default_factory=list)
+    connect_timeout: int | None = 10
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any] | None) -> "DeviceConfig | None":
+        if payload is None:
+            return None
+        return cls(
+            protocol=payload.get("protocol", "ssh"),
+            host=payload.get("host", ""),
+            port=payload.get("port", 22),
+            user=payload.get("user", "root"),
+            workdir=payload.get("workdir"),
+            remote_root=payload.get("remote_root"),
+            ssh_options=list(payload.get("ssh_options", [])),
+            connect_timeout=payload.get("connect_timeout", 10),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -200,6 +228,15 @@ class DeviceConfig:
 class TransportPolicy:
     mode: str = "local"
     size_threshold_mb: int = 50
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any] | None) -> "TransportPolicy | None":
+        if payload is None:
+            return None
+        return cls(
+            mode=payload.get("mode", "local"),
+            size_threshold_mb=payload.get("size_threshold_mb", 50),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -215,6 +252,16 @@ class EnvProfile:
     @classmethod
     def local_default(cls) -> "EnvProfile":
         return cls(host=HostConfig(mode="local"), transport=TransportPolicy(mode="local"))
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any] | None) -> "EnvProfile":
+        payload = payload or {}
+        return cls(
+            host=HostConfig.from_dict(payload.get("host")),
+            device=DeviceConfig.from_dict(payload.get("device")),
+            transport=TransportPolicy.from_dict(payload.get("transport")),
+            metadata=payload.get("metadata", {}),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {

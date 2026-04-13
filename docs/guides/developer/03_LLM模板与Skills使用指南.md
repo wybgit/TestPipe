@@ -34,6 +34,9 @@ testpipe show-skill case-runner --json
 testpipe run-skill case-generator examples/templates/generate_case_smoke.yaml --json
 testpipe run-skill case-checker examples/templates/check_case_smoke.yaml --json
 testpipe run-skill case-runner examples/templates/run_case_smoke.yaml --json
+testpipe run-skill case-runner examples/templates/run_case_mock_device.yaml --json
+testpipe run-skill case-runner examples/templates/run_case_mock_device_roundtrip.yaml --json
+testpipe run examples/testcases/smoke.yaml --env-profile examples/env_profiles/local_default.yaml
 ```
 
 说明:
@@ -42,6 +45,11 @@ testpipe run-skill case-runner examples/templates/run_case_smoke.yaml --json
 - `case-runner` 在 `execute: false` 时只返回执行计划
 - `case-runner` 在 `execute: true` 时会实际调用 `TestEngine`
 - 为保证 `--json` 可被脚本消费，执行阶段日志会收敛到 `execution_console_log` 字段
+- `run` 和 `case-runner` 都支持从 YAML/JSON 文件加载 `EnvProfile`
+- 框架当前只内置 deterministic skills，不在框架内部直接承载大模型调用
+- 如果后续接入 AI，推荐由外部代理先填模板，再通过 `run-skill` 或 Python API 调框架
+- 当前已经支持 mock device 环境，可用于验证 `transfer.put -> device.exec` 链路
+- 当前已经支持 round-trip mock device 环境，可用于验证 `transfer.put -> device.exec -> transfer.get` 链路
 
 ---
 

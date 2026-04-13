@@ -1,0 +1,12 @@
+test_case:
+  case_id: mock_device_uppercase_case
+  name: MockDeviceUppercasePipeline_Basic
+  pipeline: MockDeviceUppercasePipeline
+  inputs:
+    message: hello ascend
+    expected_text: HELLO ASCEND
+  expected:
+    downloaded_content: HELLO ASCEND
+    test_passed: true
+  tags: [mock-device, transform, assert]
+  priority: P1

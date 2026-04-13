@@ -1,0 +1,10 @@
+test_case:
+  case_id: mock_device_roundtrip_case
+  name: MockDeviceRoundTripPipeline_Basic
+  pipeline: MockDeviceRoundTripPipeline
+  inputs:
+    message: hello roundtrip
+  expected:
+    downloaded_content: hello roundtrip
+  tags: [mock-device, transfer, download]
+  priority: P1

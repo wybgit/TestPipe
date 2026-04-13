@@ -297,7 +297,7 @@ recommendations: []
 - `case-runner` 结构化执行计划与可选实际执行
 - `result-analyzer` 对 `summary.json` 和 `execution.log` 的结构化分析
 
-当前阶段的重点是先把模板填充后的消费链路打通，再逐步接入真实大模型与更复杂的 workflow orchestration。
+当前阶段的重点是先把模板填充后的消费链路打通。框架本体只内置 skills 与执行能力，不直接承载大模型调用；未来如需 AI 参与，建议由 `OpenCode`、`Claude Code` 等外部代理间接调用这些 skills。
 
 ---
 

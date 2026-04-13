@@ -4,6 +4,7 @@
 
 ```text
 docs/
+  backlog/          未实现需求与跟踪
   requirements/     需求与范围
   architecture/     架构与设计细节
   guides/           用户与开发指南
@@ -37,6 +38,7 @@ docs/
 ### 指南侧
 
 - [用户指南](/home/wyb/AscendCode/TestPipe/docs/guides/user/用户指南_平台使用.md)
+- [外部代理调用 Skills 指南](/home/wyb/AscendCode/TestPipe/docs/guides/user/01_外部代理调用Skills指南.md)
 - [开发总览](/home/wyb/AscendCode/TestPipe/docs/guides/developer/00_开发总览.md)
 - [自定义测试算子](/home/wyb/AscendCode/TestPipe/docs/guides/developer/01_自定义测试算子.md)
 - [自定义 API 与 Action 扩展](/home/wyb/AscendCode/TestPipe/docs/guides/developer/02_自定义API与Action扩展.md)
@@ -46,6 +48,12 @@ docs/
 
 - [架构优化建议](/home/wyb/AscendCode/TestPipe/docs/review/07_架构优化建议.md)
 - [PPT 展示版](/home/wyb/AscendCode/TestPipe/docs/presentation/PPT展示_系统架构与接口时序.md)
+
+### 跟踪与待办
+
+- [Backlog 目录说明](/home/wyb/AscendCode/TestPipe/docs/backlog/README.md)
+- [待实现需求总表](/home/wyb/AscendCode/TestPipe/docs/backlog/00_待实现需求总表.md)
+- [资源拉取与完整性校验](/home/wyb/AscendCode/TestPipe/docs/backlog/01_资源拉取与完整性校验.md)
 
 ---
 
@@ -66,6 +74,10 @@ docs/
 ### review
 
 放评审意见、风险和优化方向，回答“现有设计哪里需要收敛”。
+
+### backlog
+
+放当前未实现但已明确的需求、待办和跟踪项，回答“后面还要做什么、准备怎么做”。
 
 ### presentation
 
@@ -100,9 +112,12 @@ docs/
 
 ## 7. 当前开发起点
 
-当前基础开发优先打通:
+当前基础框架已经完成:
 
 - `YAML Case -> PipelineSpec -> TestEngine -> runs/`
 - 本机 Host 执行
-- 最小内置算子与示例 Pipeline
-- trace、summary、artifacts 基础沉淀
+- SSH/SFTP 基础执行与传输骨架
+- 最小内置算子、断言算子与示例 Pipeline
+- trace、summary、artifacts、debug 快照基础沉淀
+
+后续新增能力优先在真实案例中演进，而不是继续单独扩张通用层。

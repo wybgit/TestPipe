@@ -13,9 +13,9 @@ import yaml
 
 from testpipe.core import PipelineCompiler, create_pipeline
 from testpipe.engine import TestEngine
-from testpipe.loaders import StructuredLoader, TestCaseLoader
+from testpipe.loaders import EnvProfileLoader, StructuredLoader, TestCaseLoader
 from testpipe.skills.registry import get_skill
-from testpipe.spec import CaseSpec, EnvProfile, HostConfig, PipelineSpec, PortSpec
+from testpipe.spec import CaseSpec, EnvProfile, PipelineSpec, PortSpec
 from testpipe.validation import CaseChecker
 
 
@@ -79,6 +79,40 @@ def _scaffold_config(payload: dict[str, Any]) -> dict[str, Any] | None:
     return scaffold
 
 
+def _apply_test_op_scaffold(payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    scaffold = _scaffold_config(payload)
+    if scaffold is None:
+        return result
+    module_name = _snake_case(result["op_spec"]["op_type"])
+    root_dir = Path(str(scaffold["root_dir"]))
+    op_dir = root_dir / str(scaffold.get("ops_dir", "ops"))
+    tests_dir = root_dir / str(scaffold.get("tests_dir", "tests"))
+    docs_dir = root_dir / str(scaffold.get("docs_dir", "docs/ops"))
+    result["written_files"] = [
+        _write_text(op_dir / f"{module_name}.py", result["python_op_draft"]),
+        _write_text(tests_dir / f"test_{module_name}.py", result["unit_test_draft"]),
+        _write_text(docs_dir / f"{module_name}.md", result["doc_draft"]),
+        _write_json(docs_dir / f"{module_name}.spec.json", result["op_spec"]),
+    ]
+    return result
+
+
+def _apply_pipeline_scaffold(payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    scaffold = _scaffold_config(payload)
+    if scaffold is None:
+        return result
+    module_name = _snake_case(result["pipeline_spec"]["name"])
+    root_dir = Path(str(scaffold["root_dir"]))
+    pipelines_dir = root_dir / str(scaffold.get("pipelines_dir", "pipelines"))
+    docs_dir = root_dir / str(scaffold.get("docs_dir", "docs/pipelines"))
+    result["written_files"] = [
+        _write_text(pipelines_dir / f"{module_name}.py", result["python_pipeline_draft"]),
+        _write_text(docs_dir / f"{module_name}.mmd", result["mermaid_graph"]),
+        _write_json(docs_dir / f"{module_name}.pipeline.json", result["pipeline_spec"]),
+    ]
+    return result
+
+
 def _load_case_from_payload(payload: dict[str, Any]) -> CaseSpec:
     if payload.get("case_ref"):
         return TestCaseLoader().load(payload["case_ref"])
@@ -134,25 +168,28 @@ def _load_env_profile(ref: Any) -> EnvProfile:
     if not ref or ref == "local_default":
         return EnvProfile.local_default()
     if isinstance(ref, dict):
-        raw = ref
-    else:
-        payload = StructuredLoader().load(ref)
-        raw = payload.get("env_profile", payload)
-    host = raw.get("host", {})
-    return EnvProfile(
-        host=HostConfig(
-            mode=host.get("mode", "local"),
-            workdir=host.get("workdir"),
-            docker_image=host.get("docker_image"),
-        ),
-        metadata=raw.get("metadata", {}),
-    )
+        return EnvProfile.from_dict(ref)
+    return EnvProfileLoader().load(ref)
 
 
 def _latest_run_dir(output_root: Path, before: set[Path]) -> Path | None:
     after = {path for path in output_root.iterdir() if path.is_dir()} if output_root.exists() else set()
     created = sorted(after - before)
     return created[-1] if created else None
+
+
+def _load_failed_step_result(run_dir: Path) -> dict[str, Any] | None:
+    steps_dir = run_dir / "steps"
+    if not steps_dir.exists():
+        return None
+    for step_dir in sorted(steps_dir.iterdir(), reverse=True):
+        result_file = step_dir / "result.json"
+        if not result_file.exists():
+            continue
+        payload = json.loads(result_file.read_text(encoding="utf-8"))
+        if payload.get("status") == "failed":
+            return payload
+    return None
 
 
 class SkillRunner:
@@ -175,7 +212,6 @@ class SkillRunner:
     def _run_test_op_generator(self, payload: dict[str, Any]) -> dict[str, Any]:
         op_name = payload["op_name"]
         class_name = f"{_class_case(op_name)}Op"
-        module_name = _snake_case(op_name)
         inputs = _normalize_ports(payload.get("inputs", []), default_type="string")
         outputs = _normalize_ports(payload.get("outputs", []), default_type="string")
         attributes = payload.get("attributes", [])
@@ -244,24 +280,10 @@ class SkillRunner:
             "unit_test_draft": unit_test_draft,
             "doc_draft": doc_draft,
         }
-        scaffold = _scaffold_config(payload)
-        if scaffold is not None:
-            root_dir = Path(str(scaffold["root_dir"]))
-            op_dir = root_dir / str(scaffold.get("ops_dir", "ops"))
-            tests_dir = root_dir / str(scaffold.get("tests_dir", "tests"))
-            docs_dir = root_dir / str(scaffold.get("docs_dir", "docs/ops"))
-            written_files = [
-                _write_text(op_dir / f"{module_name}.py", python_op_draft),
-                _write_text(tests_dir / f"test_{module_name}.py", unit_test_draft),
-                _write_text(docs_dir / f"{module_name}.md", doc_draft),
-                _write_json(docs_dir / f"{module_name}.spec.json", op_spec),
-            ]
-            result["written_files"] = written_files
-        return result
+        return _apply_test_op_scaffold(payload, result)
 
     def _run_pipeline_generator(self, payload: dict[str, Any]) -> dict[str, Any]:
         stages = payload.get("stages", [])
-        module_name = _snake_case(payload["pipeline_name"])
         stage_names = [item["name"] for item in stages if item.get("name")]
         required_ops = payload.get("required_ops", [])
         pipeline_inputs = _normalize_ports(payload.get("pipeline_inputs", []), default_type="string")
@@ -345,18 +367,7 @@ class SkillRunner:
             "python_pipeline_draft": "\n".join(dsl_lines),
             "mermaid_graph": "\n".join(mermaid_lines),
         }
-        scaffold = _scaffold_config(payload)
-        if scaffold is not None:
-            root_dir = Path(str(scaffold["root_dir"]))
-            pipelines_dir = root_dir / str(scaffold.get("pipelines_dir", "pipelines"))
-            docs_dir = root_dir / str(scaffold.get("docs_dir", "docs/pipelines"))
-            written_files = [
-                _write_text(pipelines_dir / f"{module_name}.py", result["python_pipeline_draft"]),
-                _write_text(docs_dir / f"{module_name}.mmd", result["mermaid_graph"]),
-                _write_json(docs_dir / f"{module_name}.pipeline.json", pipeline_spec),
-            ]
-            result["written_files"] = written_files
-        return result
+        return _apply_pipeline_scaffold(payload, result)
 
     def _run_case_generator(self, payload: dict[str, Any]) -> dict[str, Any]:
         case_name = payload["case_name"]
@@ -389,10 +400,17 @@ class SkillRunner:
         output_root = Path(payload.get("output_dir") or "runs")
         debug = bool(payload.get("debug", False))
         execute = bool(payload.get("execute", False))
+        env_profile_ref = payload.get("env_profile")
+        env_profile = _load_env_profile(env_profile_ref)
         case = TestCaseLoader().load(case_ref)
         pipeline = create_pipeline(payload.get("pipeline_ref") or case.pipeline)
         pipeline_spec = PipelineCompiler().compile(pipeline)
-        command = f"testpipe run {case_ref}{' --debug' if debug else ''}{'' if output_root == Path('runs') else f' --output-root {output_root}'}"
+        command = (
+            f"testpipe run {case_ref}"
+            f"{'' if output_root == Path('runs') else f' --output-root {output_root}'}"
+            f"{'' if not env_profile_ref else f' --env-profile {env_profile_ref}'}"
+            f"{' --debug' if debug else ''}"
+        )
 
         result_location = None
         summary = None
@@ -404,7 +422,7 @@ class SkillRunner:
                 summary_obj = TestEngine(output_root=output_root, debug=debug).execute(
                     case_spec=case,
                     pipeline_spec=pipeline_spec,
-                    env_profile=_load_env_profile(payload.get("env_profile")),
+                    env_profile=env_profile,
                 )
             summary = summary_obj.to_dict()
             execution_console_log = console_buffer.getvalue().strip() or None
@@ -421,6 +439,7 @@ class SkillRunner:
                 "output_root": str(output_root),
                 "debug": debug,
                 "execute": execute,
+                "env_profile": env_profile.to_dict(),
             },
             "result_location": result_location,
             "summary": summary,
@@ -430,11 +449,21 @@ class SkillRunner:
     def _run_result_analyzer(self, payload: dict[str, Any]) -> dict[str, Any]:
         summary_ref = Path(payload["summary_ref"])
         summary = json.loads(summary_ref.read_text(encoding="utf-8"))
-        execution_log = summary_ref.parent / "execution.log"
+        run_dir = summary_ref.parent
+        internal_summary_ref = run_dir / "summary.internal.json"
+        internal_summary = (
+            json.loads(internal_summary_ref.read_text(encoding="utf-8"))
+            if internal_summary_ref.exists()
+            else summary
+        )
+        execution_log = run_dir / "execution.log"
         log_lines = execution_log.read_text(encoding="utf-8").splitlines() if execution_log.exists() else []
         failed_lines = [line for line in log_lines if "FAIL" in line or "error:" in line]
-        issues = summary.get("issues", [])
-        failed_step = summary.get("failed_step")
+        failed_step_result = _load_failed_step_result(run_dir)
+        failed_step = None if failed_step_result is None else failed_step_result.get("step_name")
+        issues = list(internal_summary.get("issues", []))
+        if not issues and failed_step_result is not None and failed_step_result.get("error"):
+            issues = [str(failed_step_result.get("error", ""))]
 
         if summary["status"] == "passed":
             root_cause = "no failure detected"

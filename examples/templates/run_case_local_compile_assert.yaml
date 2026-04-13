@@ -1,0 +1,4 @@
+case_ref: examples/testcases/local_compile_assert.yaml
+output_dir: runs
+debug: false
+execute: false
