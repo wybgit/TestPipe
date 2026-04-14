@@ -229,7 +229,7 @@ cases:
 
 - `pipeline.name` 必填，表示当前文件绑定的目标 Pipeline
 - `pipeline` 下除 `name` 外，其余字段直接写节点名
-- `cases` 里 `case_id` 必填，`name` 可选；如果不写 `name`，默认回落为 `case_id`
+- `cases` 里 `case_id` 必填，且在当前 YAML 文件内必须唯一
 - `cases[*]` 支持用例级字段: `description`、`level`
 - `cases[*]` 下除这些用例字段外，其余字段都直接写节点名
 - `fetchModelNode.path` 可以是 Git 仓内目录，也可以是单个文件路径

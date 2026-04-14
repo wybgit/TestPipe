@@ -23,7 +23,7 @@ class SmokeFrameworkTest(unittest.TestCase):
         case = self._load_case(
             {
                 "pipeline": {"name": "SmokePipeline"},
-                "cases": [{"case_id": "smoke_case", "name": "SmokePipeline_Basic", "echo": {"message": "hello testpipe"}}],
+                "cases": [{"case_id": "smoke_case", "description": "smoke basic case", "level": "P1", "echo": {"message": "hello testpipe"}}],
             }
         )
         pipeline = create_pipeline(case.pipeline)
@@ -46,6 +46,9 @@ class SmokeFrameworkTest(unittest.TestCase):
             summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
             self.assertEqual(summary_payload["status"], "passed")
             self.assertEqual(summary_payload["case_id"], "smoke_case")
+            self.assertEqual(summary_payload["description"], "smoke basic case")
+            self.assertEqual(summary_payload["level"], "P1")
+            self.assertNotIn("case_name", summary_payload)
             self.assertIn("run_dir", summary_payload)
             execution_log = run_dir / "execution.log"
             self.assertTrue(execution_log.exists())
@@ -72,7 +75,7 @@ class SmokeFrameworkTest(unittest.TestCase):
         case = self._load_case(
             {
                 "pipeline": {"name": "SmokePipeline"},
-                "cases": [{"case_id": "smoke_case", "name": "SmokePipeline_Basic", "echo": {"message": "hello testpipe"}}],
+                "cases": [{"case_id": "smoke_case", "echo": {"message": "hello testpipe"}}],
             }
         )
         pipeline = create_pipeline(case.pipeline)
@@ -105,7 +108,6 @@ class SmokeFrameworkTest(unittest.TestCase):
                 "cases": [
                     {
                         "case_id": "local_compile_case",
-                        "name": "LocalCompilePipeline_Basic",
                         "fetch_model": {"resource_path": "examples/assets/mock_model.onnx"},
                     }
                 ],
@@ -136,7 +138,6 @@ class SmokeFrameworkTest(unittest.TestCase):
                 "cases": [
                     {
                         "case_id": "local_compile_assert_case",
-                        "name": "LocalCompileAssertPipeline_Basic",
                         "fetch_model": {"resource_path": "examples/assets/mock_model.onnx"},
                     }
                 ],
@@ -177,7 +178,6 @@ class SmokeFrameworkTest(unittest.TestCase):
                 "cases": [
                     {
                         "case_id": "mock_device_case",
-                        "name": "MockDevicePipeline_Basic",
                         "write_message": {"message": "hello mock device"},
                     }
                 ],
@@ -211,7 +211,6 @@ class SmokeFrameworkTest(unittest.TestCase):
                 "cases": [
                     {
                         "case_id": "mock_device_roundtrip_case",
-                        "name": "MockDeviceRoundTripPipeline_Basic",
                         "write_message": {"message": "hello roundtrip"},
                     }
                 ],

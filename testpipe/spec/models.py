@@ -111,7 +111,6 @@ class PipelineSpec:
 @dataclass(slots=True)
 class CaseSpec:
     case_id: str
-    name: str
     pipeline: str
     inputs: dict[str, Any]
     inputs_by_node: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -122,6 +121,7 @@ class CaseSpec:
     priority: str = "P2"
     timeout: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    name: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

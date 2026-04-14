@@ -41,7 +41,7 @@ class TestCaseSuiteTest(unittest.TestCase):
         }
 
         case = TestCaseLoader().load_data(payload)
-        self.assertEqual(case.name, "single_case")
+        self.assertEqual(case.name, "")
         self.assertEqual(case.variables, {})
         self.assertEqual(case.inputs["message"], "hello single")
         self.assertEqual(case.inputs_by_node["echo"]["message"], "hello single")
@@ -59,8 +59,8 @@ class TestCaseSuiteTest(unittest.TestCase):
                         "echo": {"message": "hello suite"},
                     },
                     "cases": [
-                        {"case_id": "smoke_suite_default", "name": "SmokeSuite_Default"},
-                        {"case_id": "smoke_suite_override", "name": "SmokeSuite_Override", "echo": {"message": "hello suite override"}},
+                        {"case_id": "smoke_suite_default"},
+                        {"case_id": "smoke_suite_override", "echo": {"message": "hello suite override"}},
                     ],
                 },
             )
@@ -93,6 +93,18 @@ class TestCaseSuiteTest(unittest.TestCase):
         issue_fields = {issue.field for issue in report.issues}
         self.assertIn("inputs_by_node.echo.env_ready", issue_fields)
         self.assertIn("inputs_by_node.missing_node", issue_fields)
+
+    def test_loader_rejects_duplicate_case_ids(self) -> None:
+        bootstrap()
+        payload = {
+            "pipeline": {"name": "SmokePipeline"},
+            "cases": [
+                {"case_id": "dup_case", "echo": {"message": "hello"}},
+                {"case_id": "dup_case", "echo": {"message": "world"}},
+            ],
+        }
+        with self.assertRaisesRegex(ValueError, "duplicate case_id"):
+            TestCaseLoader().load_many_data(payload)
 
     def test_check_case_cli_supports_multi_case_aggregation_and_selection(self) -> None:
         bootstrap()
@@ -133,8 +145,18 @@ class TestCaseSuiteTest(unittest.TestCase):
                 {
                     "pipeline": {"name": "SmokePipeline"},
                     "cases": [
-                        {"case_id": "smoke_suite_default", "name": "SmokeSuite_Default", "echo": {"message": "hello suite"}},
-                        {"case_id": "smoke_suite_override", "name": "SmokeSuite_Override", "echo": {"message": "hello suite override"}},
+                        {
+                            "case_id": "smoke_suite_default",
+                            "description": "default suite case",
+                            "level": "P1",
+                            "echo": {"message": "hello suite"},
+                        },
+                        {
+                            "case_id": "smoke_suite_override",
+                            "description": "override suite case",
+                            "level": "P0",
+                            "echo": {"message": "hello suite override"},
+                        },
                     ],
                 },
             )
@@ -144,6 +166,10 @@ class TestCaseSuiteTest(unittest.TestCase):
             self.assertEqual(len([path for path in run_dirs if (path / "summary.json").exists()]), 2)
             summary_files = [path / "summary.json" for path in run_dirs if (path / "summary.json").exists()]
             self.assertTrue(all(path.exists() for path in summary_files))
+            summary_payloads = [json.loads(path.read_text(encoding="utf-8")) for path in summary_files]
+            self.assertTrue(all("description" in item for item in summary_payloads))
+            self.assertTrue(all("level" in item for item in summary_payloads))
+            self.assertTrue(all("case_name" not in item for item in summary_payloads))
 
 
 if __name__ == "__main__":

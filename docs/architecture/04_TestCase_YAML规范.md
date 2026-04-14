@@ -61,7 +61,7 @@ cases:
 ### 3.3 Cases 段约束
 
 - `case_id` 必填
-- `name` 可选，不再要求必须填写
+- `case_id` 是当前 YAML 文件内用例的唯一标识
 - 当前推荐的用例元信息仅包含:
   - `description`
   - `level`

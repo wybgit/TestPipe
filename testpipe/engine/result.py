@@ -10,7 +10,8 @@ from typing import Any
 @dataclass(slots=True)
 class ResultSummary:
     case_id: str
-    case_name: str
+    description: str
+    level: str
     pipeline: str
     status: str
     duration_ms: int
@@ -24,7 +25,8 @@ class ResultSummary:
     def to_dict(self) -> dict[str, Any]:
         return {
             "case_id": self.case_id,
-            "case_name": self.case_name,
+            "description": self.description,
+            "level": self.level,
             "pipeline": self.pipeline,
             "status": self.status,
             "duration_ms": self.duration_ms,

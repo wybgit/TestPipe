@@ -119,10 +119,14 @@ class TestCaseLoader:
         pipeline_input_names = self._pipeline_input_names(pipeline_name)
 
         cases: list[CaseSpec] = []
+        seen_case_ids: set[str] = set()
         for item in cases_raw:
             if not isinstance(item, dict):
                 raise ValueError("each cases entry must be a mapping")
             name, case_id = self._resolve_case_identity(item)
+            if case_id in seen_case_ids:
+                raise ValueError(f"duplicate case_id in case document: {case_id}")
+            seen_case_ids.add(case_id)
             merged_vars = self._deep_merge(pipeline_vars, self._mapping(item.get("vars", item.get("variables", {}))))
             merged_inputs = self._deep_merge(pipeline_inputs, self._mapping(item.get("inputs", {})))
             merged_inputs_by_node = self._deep_merge(
@@ -139,7 +143,6 @@ class TestCaseLoader:
                 "vars": merged_vars,
                 "case": {
                     "case_id": case_id,
-                    "name": name,
                     "pipeline": pipeline_name,
                 },
             }
@@ -154,7 +157,6 @@ class TestCaseLoader:
             cases.append(
                 CaseSpec(
                     case_id=case_id,
-                    name=name,
                     pipeline=item.get("pipeline", pipeline_name),
                     inputs=final_inputs,
                     inputs_by_node=resolved_inputs_by_node,
@@ -169,6 +171,7 @@ class TestCaseLoader:
                         "source_file": str(source),
                         "source_suite": len(cases_raw) > 1,
                     },
+                    name=str(item.get("name", "")),
                 )
             )
         return cases

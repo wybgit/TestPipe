@@ -427,15 +427,16 @@ class SkillRunner:
             return result
 
         case_name = payload["case_name"]
+        case_id = _snake_case(case_name)
         target_pipeline = payload["target_pipeline"]
         case_spec = CaseSpec(
-            case_id=_snake_case(case_name),
-            name=case_name,
+            case_id=case_id,
             pipeline=target_pipeline,
             inputs=payload.get("inputs", {}),
             expected=payload.get("expected", {}),
             tags=payload.get("tags", []),
             priority=payload.get("priority", "P2"),
+            description=payload.get("test_goal", ""),
             metadata={
                 "test_goal": payload.get("test_goal", ""),
                 "environment_hint": payload.get("environment_hint", ""),
@@ -451,7 +452,8 @@ class SkillRunner:
                     "cases": [
                         {
                             "case_id": case_spec.case_id,
-                            "name": case_spec.name,
+                            **({"description": case_spec.description} if case_spec.description else {}),
+                            **({"level": case_spec.priority} if case_spec.priority else {}),
                             **_infer_case_node_inputs(target_pipeline, case_spec.inputs),
                         }
                     ],

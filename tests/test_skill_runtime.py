@@ -113,7 +113,7 @@ class SkillRuntimeTest(unittest.TestCase):
                 "smoke.yaml",
                 {
                     "pipeline": {"name": "SmokePipeline"},
-                    "cases": [{"case_id": "smoke_case", "name": "SmokePipeline_Basic", "echo": {"message": "hello"}}],
+                    "cases": [{"case_id": "smoke_case", "echo": {"message": "hello"}}],
                 },
             )
             result = SkillRunner().run(
@@ -137,8 +137,8 @@ class SkillRuntimeTest(unittest.TestCase):
                 {
                     "pipeline": {"name": "SmokePipeline"},
                     "cases": [
-                        {"case_id": "suite_a", "name": "SuiteA", "echo": {"message": "hello"}},
-                        {"case_id": "suite_b", "name": "SuiteB", "echo": {"message": "world"}},
+                        {"case_id": "suite_a", "echo": {"message": "hello"}},
+                        {"case_id": "suite_b", "echo": {"message": "world"}},
                     ],
                 },
             )
@@ -194,7 +194,7 @@ class SkillRuntimeTest(unittest.TestCase):
                 "smoke.yaml",
                 {
                     "pipeline": {"name": "SmokePipeline"},
-                    "cases": [{"case_id": "smoke_case", "name": "SmokePipeline_Basic", "echo": {"message": "hello"}}],
+                    "cases": [{"case_id": "smoke_case", "echo": {"message": "hello"}}],
                 },
             )
             result = SkillRunner().run(
@@ -321,7 +321,7 @@ class SkillRuntimeTest(unittest.TestCase):
                 "smoke.yaml",
                 {
                     "pipeline": {"name": "SmokePipeline"},
-                    "cases": [{"case_id": "smoke_case", "name": "SmokePipeline_Basic", "echo": {"message": "hello"}}],
+                    "cases": [{"case_id": "smoke_case", "echo": {"message": "hello"}}],
                 },
             )
             payload["case_ref"] = str(case_file)
@@ -392,7 +392,7 @@ class SkillRuntimeTest(unittest.TestCase):
                 "smoke.yaml",
                 {
                     "pipeline": {"name": "SmokePipeline"},
-                    "cases": [{"case_id": "smoke_case", "name": "SmokePipeline_Basic", "echo": {"message": "hello"}}],
+                    "cases": [{"case_id": "smoke_case", "echo": {"message": "hello"}}],
                 },
             )
             buffer = StringIO()

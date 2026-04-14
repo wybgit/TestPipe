@@ -73,7 +73,7 @@ class LLMAssetRegistryTest(unittest.TestCase):
         case = TestCaseLoader().load_data(
             {
                 "pipeline": {"name": "SmokePipeline"},
-                "cases": [{"case_id": "smoke_case", "name": "SmokePipeline_Basic", "echo": {"message": "hello"}}],
+                "cases": [{"case_id": "smoke_case", "echo": {"message": "hello"}}],
             }
         )
         case.inputs.pop("message")

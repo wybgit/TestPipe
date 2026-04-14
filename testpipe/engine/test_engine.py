@@ -146,7 +146,8 @@ class TestEngine:
             ended_at = datetime.now(UTC)
             summary = ResultSummary(
                 case_id=case_spec.case_id,
-                case_name=case_spec.name,
+                description=case_spec.description,
+                level=case_spec.priority,
                 pipeline=pipeline_spec.name,
                 status="passed" if not issues else "failed",
                 duration_ms=int((ended_at - started_at).total_seconds() * 1000),
@@ -309,7 +310,8 @@ class TestEngine:
     def _print_case_summary(self, summary: ResultSummary) -> None:
         body_lines = [
             f"case_id: {summary.case_id}",
-            f"case_name: {summary.case_name}",
+            f"description: {summary.description}",
+            f"level: {summary.level}",
             f"pipeline: {summary.pipeline}",
             f"status: {summary.status}",
             f"duration_ms: {summary.duration_ms}",
