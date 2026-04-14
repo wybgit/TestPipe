@@ -3,41 +3,69 @@
 from __future__ import annotations
 
 from testpipe.core.exceptions import PipelineCompileError
-from testpipe.spec import EdgeSpec, NodeSpec, PipelineSpec
+from testpipe.core.pipeline import NodeOutputRef, PipelineInputRef
+from testpipe.core.registry import get_op_name
+from testpipe.spec import EdgeSpec, InputBindingSpec, NodeSpec, PipelineSpec
 
 
 class PipelineCompiler:
     """Compile authoring-layer pipelines into static specs."""
 
     def compile(self, pipeline) -> PipelineSpec:
-        step_names = [step.name for step in pipeline.steps]
-        if len(step_names) != len(set(step_names)):
+        node_names = [node.name for node in pipeline.nodes]
+        if len(node_names) != len(set(node_names)):
             raise PipelineCompileError("duplicate step names in pipeline")
 
         nodes = []
-        for step in pipeline.steps:
-            spec = getattr(step.op, "spec", None)
+        edges: list[EdgeSpec] = []
+        groups: list[str] = []
+
+        for node in pipeline.nodes:
+            spec = getattr(node.op, "spec", None)
             if spec is None:
-                raise PipelineCompileError(f"step {step.name} does not expose op spec")
+                raise PipelineCompileError(f"step {node.name} does not expose op spec")
+            input_bindings: list[InputBindingSpec] = []
+            for input_name, binding in node.input_bindings.items():
+                if isinstance(binding, PipelineInputRef):
+                    input_bindings.append(
+                        InputBindingSpec(
+                            input_name=input_name,
+                            source_kind="pipeline_input",
+                            source_name=binding.port_name,
+                        )
+                    )
+                    continue
+                if isinstance(binding, NodeOutputRef):
+                    input_bindings.append(
+                        InputBindingSpec(
+                            input_name=input_name,
+                            source_kind="node_output",
+                            source_name=binding.node_name,
+                            source_port=binding.port_name,
+                        )
+                    )
+                    edges.append(
+                        EdgeSpec(
+                            source_node=binding.node_name,
+                            source_port=binding.port_name,
+                            target_node=node.name,
+                            target_port=input_name,
+                        )
+                    )
+                    continue
+                raise PipelineCompileError(f"unsupported binding for {node.name}.{input_name}: {binding!r}")
             nodes.append(
                 NodeSpec(
-                    name=step.name,
-                    op_type=spec.op_type,
+                    name=node.name,
+                    op=get_op_name(node.op),
                     op_version=spec.version,
-                    stage=step.stage,
-                    attrs=step.op.resolved_attrs(),
+                    module=node.op.__class__.__module__,
+                    attrs=node.op.resolved_attrs(),
+                    input_bindings=input_bindings,
                 )
             )
-
-        edges = [
-            EdgeSpec(
-                source_node=edge.source_node,
-                source_port=edge.source_port,
-                target_node=edge.target_node,
-                target_port=edge.target_port,
-            )
-            for edge in pipeline.edges
-        ]
+            if node.group:
+                groups.append(node.group)
 
         return PipelineSpec(
             name=pipeline.pipeline_name,
@@ -48,6 +76,6 @@ class PipelineCompiler:
             nodes=nodes,
             edges=edges,
             metadata={
-                "stages": [step.stage for step in pipeline.steps if step.stage],
+                "groups": list(dict.fromkeys(groups)),
             },
         )

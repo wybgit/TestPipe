@@ -3,7 +3,7 @@ test_case:
   name: LocalCompileAssertPipeline_Basic
   pipeline: LocalCompileAssertPipeline
   inputs:
-    resource_path: examples/assets/mock_model.onnx
+    resource_path: examples/assets/sample_model.onnx
   expected:
     path_exists: true
     test_passed: true

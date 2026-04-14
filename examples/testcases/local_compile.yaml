@@ -3,6 +3,6 @@ test_case:
   name: LocalCompilePipeline_Basic
   pipeline: LocalCompilePipeline
   inputs:
-    resource_path: examples/assets/mock_model.onnx
+    resource_path: examples/assets/sample_model.onnx
   tags: [local, compile, transfer]
   priority: P1

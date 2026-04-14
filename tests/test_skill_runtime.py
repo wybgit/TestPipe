@@ -47,7 +47,8 @@ class SkillRuntimeTest(unittest.TestCase):
         )
         self.assertEqual(result["pipeline_spec"]["name"], "GeneratedPipeline")
         self.assertIn("flowchart LR", result["mermaid_graph"])
-        self.assertIn("self.set_stage('prepare')", result["python_pipeline_draft"])
+        self.assertIn("self.use_group('prepare')", result["python_pipeline_draft"])
+        self.assertIn("self.add_node('01_env_check', EnvCheckOp())", result["python_pipeline_draft"])
 
     def test_test_op_generator_can_scaffold_files(self) -> None:
         bootstrap()
@@ -56,7 +57,7 @@ class SkillRuntimeTest(unittest.TestCase):
                 "test-op-generator",
                 {
                     "op_name": "PathExistsCheck",
-                    "op_category": "check",
+                    "op_folder": "asserts",
                     "business_goal": "check whether a path exists",
                     "inputs": [{"name": "target_path", "type": "artifact:path", "description": "path to inspect"}],
                     "outputs": [{"name": "path_exists", "type": "bool", "description": "path existence result"}],
@@ -67,7 +68,7 @@ class SkillRuntimeTest(unittest.TestCase):
                 },
             )
             self.assertEqual(len(result["written_files"]), 4)
-            self.assertTrue((Path(tmp_dir) / "ops" / "path_exists_check.py").exists())
+            self.assertTrue((Path(tmp_dir) / "ops" / "asserts" / "path_exists_check.py").exists())
             self.assertTrue((Path(tmp_dir) / "tests" / "test_path_exists_check.py").exists())
             self.assertTrue((Path(tmp_dir) / "docs" / "ops" / "path_exists_check.md").exists())
 
@@ -129,7 +130,7 @@ class SkillRuntimeTest(unittest.TestCase):
                     "size_threshold_mb": 128,
                 },
                 "metadata": {
-                    "profile_name": "remote_mock",
+                    "profile_name": "remote_ssh",
                 },
             }
         }

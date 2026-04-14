@@ -83,9 +83,10 @@ def _apply_test_op_scaffold(payload: dict[str, Any], result: dict[str, Any]) -> 
     scaffold = _scaffold_config(payload)
     if scaffold is None:
         return result
-    module_name = _snake_case(result["op_spec"]["op_type"])
+    module_name = _snake_case(result["op_spec"]["name"])
     root_dir = Path(str(scaffold["root_dir"]))
-    op_dir = root_dir / str(scaffold.get("ops_dir", "ops"))
+    op_folder = str(result["op_spec"].get("folder", "custom"))
+    op_dir = root_dir / str(scaffold.get("ops_dir", "ops")) / op_folder
     tests_dir = root_dir / str(scaffold.get("tests_dir", "tests"))
     docs_dir = root_dir / str(scaffold.get("docs_dir", "docs/ops"))
     result["written_files"] = [
@@ -212,13 +213,14 @@ class SkillRunner:
     def _run_test_op_generator(self, payload: dict[str, Any]) -> dict[str, Any]:
         op_name = payload["op_name"]
         class_name = f"{_class_case(op_name)}Op"
+        op_folder = payload.get("op_folder", payload.get("op_category", "custom"))
         inputs = _normalize_ports(payload.get("inputs", []), default_type="string")
         outputs = _normalize_ports(payload.get("outputs", []), default_type="string")
         attributes = payload.get("attributes", [])
         op_spec = {
-            "op_type": op_name,
+            "name": op_name,
             "version": "1.0",
-            "category": payload.get("op_category", "custom"),
+            "folder": op_folder,
             "description": payload.get("business_goal", ""),
             "inputs": inputs,
             "outputs": outputs,
@@ -231,9 +233,7 @@ class SkillRunner:
                 '    """Generated from test-op template."""',
                 "",
                 "    spec = OpSpec(",
-                f"        op_type={op_name!r},",
                 '        version="1.0",',
-                f"        category={payload.get('op_category', 'custom')!r},",
                 f"        description={payload.get('business_goal', '')!r},",
                 "        inputs=[",
                 *[
@@ -294,8 +294,8 @@ class SkillRunner:
             nodes.append(
                 {
                     "name": f"{index:02d}_{_snake_case(op_name)}",
-                    "op_type": op_name,
-                    "stage": stage_name,
+                    "op": op_name,
+                    "group": stage_name,
                     "attrs": {},
                 }
             )
@@ -304,12 +304,12 @@ class SkillRunner:
         if stage_names:
             for stage_name in stage_names:
                 mermaid_lines.append(f"  subgraph {stage_name}[{stage_name}]")
-                for node in [item for item in nodes if item["stage"] == stage_name]:
-                    mermaid_lines.append(f"    {node['name']}[{node['op_type']}]")
+                for node in [item for item in nodes if item["group"] == stage_name]:
+                    mermaid_lines.append(f"    {node['name']}[{node['op']}]")
                 mermaid_lines.append("  end")
         else:
             for node in nodes:
-                mermaid_lines.append(f"  {node['name']}[{node['op_type']}]")
+                mermaid_lines.append(f"  {node['name']}[{node['op']}]")
         for source, target in zip(nodes, nodes[1:]):
             mermaid_lines.append(f"  {source['name']} --> {target['name']}")
 
@@ -330,14 +330,19 @@ class SkillRunner:
                 for item in pipeline_outputs
             )
             dsl_lines.append(f"        self.set_outputs({rendered_outputs})")
+        node_handles: list[str] = []
         if stage_names:
             for stage_name in stage_names:
-                dsl_lines.append(f"        self.set_stage({stage_name!r})")
-                for node in [item for item in nodes if item["stage"] == stage_name]:
-                    dsl_lines.append(f"        self.add_step({node['name']!r}, {_class_case(node['op_type'])}Op())")
+                dsl_lines.append(f"        self.use_group({stage_name!r})")
+                for node in [item for item in nodes if item["group"] == stage_name]:
+                    handle_name = f"{node['name']}_node"
+                    dsl_lines.append(f"        {handle_name} = self.add_node({node['name']!r}, {_class_case(node['op'])}Op())")
+                    node_handles.append(handle_name)
         else:
             for node in nodes:
-                dsl_lines.append(f"        self.add_step({node['name']!r}, {_class_case(node['op_type'])}Op())")
+                handle_name = f"{node['name']}_node"
+                dsl_lines.append(f"        {handle_name} = self.add_node({node['name']!r}, {_class_case(node['op'])}Op())")
+                node_handles.append(handle_name)
 
         pipeline_spec = {
             "name": payload["pipeline_name"],
@@ -356,7 +361,7 @@ class SkillRunner:
                 for source, target in zip(nodes, nodes[1:])
             ],
             "metadata": {
-                "stages": stage_names,
+                "groups": stage_names,
                 "required_ops": required_ops,
                 "optional_ops": payload.get("optional_ops", []),
                 "data_flow_notes": payload.get("data_flow_notes", []),
@@ -435,7 +440,7 @@ class SkillRunner:
                 "case_id": case.case_id,
                 "pipeline": pipeline_spec.name,
                 "total_steps": len(pipeline_spec.nodes),
-                "stages": list(dict.fromkeys(pipeline_spec.metadata.get("stages", []))),
+                "groups": list(dict.fromkeys(pipeline_spec.metadata.get("groups", []))),
                 "output_root": str(output_root),
                 "debug": debug,
                 "execute": execute,

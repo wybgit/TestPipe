@@ -11,6 +11,8 @@ from .pipeline import Pipeline
 from .registry import (
     create_pipeline,
     get_op_class,
+    get_op_folder,
+    get_op_name,
     list_pipelines,
     register_op,
     register_pipeline,
@@ -27,6 +29,8 @@ __all__ = [
     "ValidationError",
     "create_pipeline",
     "get_op_class",
+    "get_op_folder",
+    "get_op_name",
     "list_pipelines",
     "register_op",
     "register_pipeline",

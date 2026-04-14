@@ -11,6 +11,7 @@ from time import perf_counter
 from typing import Any
 
 from testpipe.core import StepExecutionError, get_op_class
+from testpipe.core.registry import get_op_folder
 from testpipe.engine.context import ExecutionContext, MappingView, StepContext
 from testpipe.engine.planner import ExecutionPlanner
 from testpipe.engine.result import ResultSummary, evaluate_expected
@@ -53,7 +54,7 @@ class TestEngine:
         try:
             for step in plan:
                 node_spec = pipeline_spec.node_map()[step.node_name]
-                op_class = get_op_class(node_spec.op_type)
+                op_class = get_op_class(node_spec.op)
                 op = op_class(**node_spec.attrs)
                 step_dir = run_dir / "steps" / f"{step.index:02d}_{step.node_name}"
                 step_dir.mkdir(parents=True, exist_ok=True)
@@ -112,7 +113,7 @@ class TestEngine:
                         self._append_step_error(stderr_log, f"[teardown] {teardown_exc}")
                     duration_ms = int((perf_counter() - step_started) * 1000)
                     rendered_outputs = self._select_visible_outputs(outputs, visible_outputs)
-                    node_type = self._node_type_label(op_class)
+                    node_type = self._node_type_label(pipeline_spec, node_spec, step, op_class)
                     checks = self._build_checks(node_spec, op_class, display_inputs, rendered_outputs)
                     step_result = self._build_step_result(
                         step=step,
@@ -190,14 +191,14 @@ class TestEngine:
             "step_index": step.index,
             "total_steps": total_steps,
             "step_name": node_spec.name,
-            "op_type": node_spec.op_type,
+            "op": node_spec.op,
             "node_type": node_type,
             "status": status,
             "duration_ms": duration_ms,
             "inputs": step_inputs,
             "params": dict(node_spec.attrs),
-            "commands": self._build_step_commands(node_spec.op_type, step_inputs, step_events),
-            "execution_logs": self._build_execution_logs(node_spec.op_type, step_events),
+            "commands": self._build_step_commands(node_spec.op, step_inputs, step_events),
+            "execution_logs": self._build_execution_logs(node_spec.op, step_events),
             "outputs": outputs,
             "checks": checks,
             "error": failure_message,
@@ -212,7 +213,7 @@ class TestEngine:
         header = (
             f"[{marker}][{step_result['node_type']}] "
             f"{step_result['step_index']}/{step_result['total_steps']} "
-            f"{step_result['step_name']} ({step_result['op_type']}) | {step_result['duration_ms']}ms"
+            f"{step_result['step_name']} ({step_result['op']}) | {step_result['duration_ms']}ms"
         )
         self._emit_block(
             execution_log_path,
@@ -222,17 +223,17 @@ class TestEngine:
         )
 
     def _collect_inputs(self, pipeline_spec, node_name: str, context: ExecutionContext) -> dict[str, object]:
-        inputs = {
-            item.name: context.shared_data[item.name]
-            for item in pipeline_spec.inputs
-            if item.name in context.shared_data
-        }
-        for edge in pipeline_spec.edges:
-            if edge.target_node != node_name:
+        node_spec = pipeline_spec.node_map()[node_name]
+        inputs: dict[str, object] = {}
+        for binding in node_spec.input_bindings:
+            if binding.source_kind == "pipeline_input":
+                if binding.source_name in context.shared_data:
+                    inputs[binding.input_name] = context.shared_data[binding.source_name]
                 continue
-            source_outputs = context.node_outputs.get(edge.source_node, {})
-            if edge.source_port in source_outputs:
-                inputs[edge.target_port] = source_outputs[edge.source_port]
+            if binding.source_kind == "node_output":
+                source_outputs = context.node_outputs.get(binding.source_name, {})
+                if binding.source_port in source_outputs:
+                    inputs[binding.input_name] = source_outputs[binding.source_port]
         return inputs
 
     def _filter_step_inputs(self, op_class, inputs: dict[str, object]) -> dict[str, object]:
@@ -261,7 +262,7 @@ class TestEngine:
             header=(
                 f"[{marker}][{step_result['node_type']}] "
                 f"{step_result['step_index']}/{step_result['total_steps']} "
-                f"{step_result['step_name']} ({step_result['op_type']}) | {step_result['duration_ms']}ms"
+                f"{step_result['step_name']} ({step_result['op']}) | {step_result['duration_ms']}ms"
             ),
             body_lines=body_lines,
         )
@@ -362,13 +363,13 @@ class TestEngine:
             return "OUTPUT"
         return None
 
-    def _node_type_label(self, op_class) -> str:
-        category = getattr(op_class.spec, "category", "")
-        if category == "assert":
+    def _node_type_label(self, pipeline_spec, node_spec, step, op_class) -> str:
+        if get_op_folder(op_class) == "asserts":
             return "OUTPUT"
-        if category in {"resource", "compile", "host", "device", "transfer", "utility"}:
-            return "EXEC"
-        return "INPUT"
+        has_downstream = any(edge.source_node == node_spec.name for edge in pipeline_spec.edges)
+        if not step.depends_on and has_downstream:
+            return "INPUT"
+        return "EXEC"
 
     def _render_step_body(self, step_result: dict[str, Any]) -> list[str]:
         node_type = str(step_result["node_type"])
@@ -384,8 +385,7 @@ class TestEngine:
         return body_lines
 
     def _build_checks(self, node_spec, op_class, step_inputs: dict[str, object], outputs: dict[str, object]) -> dict[str, object]:
-        category = getattr(op_class.spec, "category", "")
-        if category != "assert":
+        if get_op_folder(op_class) != "asserts":
             return {}
 
         checks: dict[str, object] = {}
@@ -401,9 +401,9 @@ class TestEngine:
             checks["check_result"] = outputs["path_exists"]
         return checks
 
-    def _build_step_commands(self, op_type: str, step_inputs: dict[str, object], step_events) -> list[str]:
+    def _build_step_commands(self, op: str, step_inputs: dict[str, object], step_events) -> list[str]:
         commands = [item for item in (self._render_event_command(event) for event in step_events) if item]
-        if self.debug or op_type != "ResourceFetch":
+        if self.debug or op != "ResourceFetch":
             return commands
 
         resource_ref = step_inputs.get("resource_ref")
@@ -420,8 +420,8 @@ class TestEngine:
             return [f"fetch local resource path={resource_path}"]
         return commands
 
-    def _build_execution_logs(self, op_type: str, step_events) -> dict[str, str]:
-        if not self.debug and op_type == "ResourceFetch":
+    def _build_execution_logs(self, op: str, step_events) -> dict[str, str]:
+        if not self.debug and op == "ResourceFetch":
             if not step_events:
                 return {}
             last_event = step_events[-1]

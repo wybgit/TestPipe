@@ -83,10 +83,10 @@ class StepContext:
     logger_name: str
     debug: bool
 
-    def to_step_record(self, *, status: str, op_type: str, outputs: dict[str, Any], duration_ms: int) -> dict[str, Any]:
+    def to_step_record(self, *, status: str, op: str, outputs: dict[str, Any], duration_ms: int) -> dict[str, Any]:
         return {
             "step_name": self.node_name,
-            "op_type": op_type,
+            "op": op,
             "status": status,
             "duration_ms": duration_ms,
             "inputs": sorted(self.inputs.to_dict().keys()),

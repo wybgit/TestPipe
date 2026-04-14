@@ -34,10 +34,6 @@ testpipe list-pipelines
 LocalCompileAssertPipeline
 LocalCompilePipeline
 OnnxGitAtcPipeline
-MockDeviceJsonPipeline
-MockDevicePipeline
-MockDeviceRoundTripPipeline
-MockDeviceUppercasePipeline
 SmokePipeline
 ```
 
@@ -75,38 +71,6 @@ testpipe run examples/testcases/local_compile_assert.yaml
 ```
 
 该样例会在编译传输后追加 `PathExists -> ValueCompare` 断言链路，并输出 `path_exists` 与 `test_passed`。
-
-也可以运行 mock device 链路样例:
-
-```bash
-testpipe run examples/testcases/mock_device.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-```
-
-该样例会走 `transfer.put -> device.exec` 的完整链路，当前通过本地 mock device 工作空间模拟设备侧文件系统和命令执行。
-
-如果需要验证设备侧产物回传，也可以运行 round-trip 样例:
-
-```bash
-testpipe run examples/testcases/mock_device_roundtrip.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-```
-
-该样例会走 `transfer.put -> device.exec -> transfer.get` 的闭环链路，模拟设备侧生成输出文件后再下载回主机。
-
-如果需要验证“设备侧处理结果 + 业务断言”的完整链路，可以运行:
-
-```bash
-testpipe run examples/testcases/mock_device_uppercase.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-```
-
-该样例会走 `transfer.put -> device.exec -> transfer.get -> TextEquals`，模拟设备侧把文本转换为大写后下载回主机，并显式输出 `test_passed`。
-
-如果需要验证结构化 JSON 结果，可以运行:
-
-```bash
-testpipe run examples/testcases/mock_device_json.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-```
-
-该样例会走 `transfer.put -> device.exec -> transfer.get -> ReadJsonArtifact -> JsonObjectAssert`，模拟设备侧生成 `result.json` 并校验多个字段。
 
 如果需要运行真实主线案例，从 Git 仓拉取 ONNX 并通过 CANN `atc` 转换成 `om`，可以运行:
 
@@ -155,7 +119,7 @@ testpipe run examples/testcases/smoke.yaml --env-profile examples/env_profiles/l
 如果需要准备真实设备环境，可以参考 SSH/SFTP 环境模板:
 
 ```bash
-cat examples/env_profiles/ssh_device_mock.yaml
+cat examples/env_profiles/ssh_device.yaml
 ```
 
 这个模板当前重点覆盖:
@@ -173,7 +137,6 @@ cat examples/env_profiles/ssh_device_mock.yaml
 - `execution.log`
 - `resources/` 里的用例资源和稳定产物
 - `steps/<step>/` 下的执行日志、执行结果和命令脚本
-- `device_fs/` 下的 mock device 工作空间产物（仅设备 mock 场景）
 
 典型结构:
 
@@ -306,17 +269,13 @@ testpipe run-skill pipeline-generator examples/templates/generate_pipeline_scaff
 - `ArtifactStore`
 - 内置 `SmokePipeline` 与 `LocalCompilePipeline`
 - 内置 `LocalCompileAssertPipeline`
-- 内置 `MockDeviceJsonPipeline`
-- 内置 `MockDevicePipeline`
-- 内置 `MockDeviceRoundTripPipeline`
-- 内置 `MockDeviceUppercasePipeline`
 - 内置 `OnnxGitAtcPipeline`
 - 内置模板注册表与 skill 注册表
 - `run-skill` CLI 入口
 - `case-generator / case-checker / case-runner / result-analyzer`
 - `test-op-generator / pipeline-generator` 脚手架生成
 - `EnvProfile` YAML/JSON 加载与运行时注入
-- `DeviceExecutor` / `TransferExecutor` 的 mock 模式
+- `DeviceExecutor` / `TransferExecutor` 的 local / SSH-SFTP 模式
 - SSH/SFTP 命令构建、远端根目录约束、远端目录预创建
 - `transfer.put / transfer.get / device.exec` trace 记录
 - `ResourceFetch` 主线支持本地路径与 Git 仓目录资源
@@ -336,12 +295,12 @@ testpipe run-skill pipeline-generator examples/templates/generate_pipeline_scaff
 当前可以认为“功能框架的基本开发内容”已经完成，范围包括:
 
 - 统一执行主链路
-- 基础 Host / mock-device / SSH-SFTP 运行骨架
+- 基础 Host / local-device / SSH-SFTP 运行骨架
 - 一组可直接运行的内置 Pipeline 和示例用例
 - normal/debug 双模式输出
 - 模板/skill 驱动的生成、检查、执行、分析入口
 
-后续开发将优先围绕真实案例推进，不再继续单独扩张抽象层。
+当前功能检查默认只保留简单 `smoke` 用例。
 
 ## 常用命令
 
@@ -358,20 +317,8 @@ testpipe run examples/testcases/smoke.yaml --debug
 # 指定环境配置文件
 testpipe run examples/testcases/smoke.yaml --env-profile examples/env_profiles/local_default.yaml
 
-# 运行 mock device 样例
-testpipe run examples/testcases/mock_device.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-
 # 运行 Git ONNX -> OM 主线案例
 testpipe run examples/testcases/onnx_git_atc.yaml --env-profile examples/env_profiles/local_cann_atc.yaml
-
-# 运行 mock device JSON 结果样例
-testpipe run examples/testcases/mock_device_json.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-
-# 运行 mock device round-trip 样例
-testpipe run examples/testcases/mock_device_roundtrip.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-
-# 运行 mock device 业务校验样例
-testpipe run examples/testcases/mock_device_uppercase.yaml --env-profile examples/env_profiles/mock_device_local.yaml
 
 # 执行前先检查用例和 Pipeline 契约是否匹配
 testpipe check-case examples/testcases/smoke.yaml
@@ -393,9 +340,6 @@ testpipe run-skill case-checker examples/templates/check_case_smoke.yaml --json
 testpipe run-skill case-runner examples/templates/run_case_smoke.yaml --json
 testpipe run-skill case-runner examples/templates/run_case_local_compile_assert.yaml --json
 testpipe run-skill case-runner examples/templates/run_case_onnx_git_atc.yaml --json
-testpipe run-skill case-runner examples/templates/run_case_mock_device_json.yaml --json
-testpipe run-skill case-runner examples/templates/run_case_mock_device.yaml --json
-testpipe run-skill case-runner examples/templates/run_case_mock_device_roundtrip.yaml --json
 
 # 直接生成脚手架文件
 testpipe run-skill test-op-generator examples/templates/generate_test_op_scaffold.yaml --json

@@ -35,9 +35,7 @@ class AttrSpec:
 
 @dataclass(slots=True)
 class OpSpec:
-    op_type: str
     version: str
-    category: str
     description: str = ""
     inputs: list[PortSpec] = field(default_factory=list)
     outputs: list[PortSpec] = field(default_factory=list)
@@ -48,9 +46,7 @@ class OpSpec:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "op_type": self.op_type,
             "version": self.version,
-            "category": self.category,
             "description": self.description,
             "inputs": [item.to_dict() for item in self.inputs],
             "outputs": [item.to_dict() for item in self.outputs],
@@ -59,12 +55,24 @@ class OpSpec:
 
 
 @dataclass(slots=True)
+class InputBindingSpec:
+    input_name: str
+    source_kind: str
+    source_name: str
+    source_port: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class NodeSpec:
     name: str
-    op_type: str
+    op: str
     op_version: str | None = None
-    stage: str | None = None
+    module: str | None = None
     attrs: dict[str, Any] = field(default_factory=dict)
+    input_bindings: list[InputBindingSpec] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

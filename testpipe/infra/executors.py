@@ -42,7 +42,7 @@ class HostExecutor:
 
 
 class DeviceExecutor:
-    """Device executor backed by local mock mode or SSH commands."""
+    """Device executor backed by local or SSH commands."""
 
     def __init__(self, action_runner, env_profile, step_context, run_dir: str | Path) -> None:
         self.action_runner = action_runner
@@ -66,7 +66,7 @@ class DeviceExecutor:
             raise StepExecutionError(self.step_context.node_name, "device executor is not configured")
         self._validate_device_config(device)
 
-        if device.protocol in {"mock", "local"}:
+        if device.protocol == "local":
             device_cwd = str(self._resolve_device_path(cwd or "."))
             result = self.action_runner.run_device(
                 command,
@@ -109,7 +109,7 @@ class DeviceExecutor:
         device = self.env_profile.device
         if device is None:
             raise StepExecutionError(self.step_context.node_name, "device executor is not configured")
-        if device.protocol in {"mock", "local"}:
+        if device.protocol == "local":
             return str(self._resolve_device_path(path))
 
         remote_root = device.remote_root
@@ -202,7 +202,7 @@ class DeviceExecutor:
         if metadata_root:
             root = Path(str(metadata_root))
         else:
-            device_name = (self.env_profile.device.host if self.env_profile.device is not None else "") or "mock-device"
+            device_name = (self.env_profile.device.host if self.env_profile.device is not None else "") or "device"
             safe_name = device_name.replace("/", "_").replace(":", "_")
             root = self.run_dir / "device_fs" / safe_name
         root.mkdir(parents=True, exist_ok=True)
@@ -230,7 +230,7 @@ class TransferExecutor:
         if not source.exists():
             raise StepExecutionError(self.step_context.node_name, f"local transfer source not found: {source}")
 
-        if self.env_profile.device is None or policy.mode in {"local", "mock", "sftp"} and self.env_profile.device.protocol in {"mock", "local"}:
+        if self.env_profile.device is None or (policy.mode == "local" and self.env_profile.device.protocol == "local"):
             destination = self.device.resolve_path(remote_path)
             self.action_runner.copy_file(
                 source,
@@ -266,7 +266,7 @@ class TransferExecutor:
             raise StepExecutionError(self.step_context.node_name, "transport executor is not configured")
 
         destination = Path(local_path)
-        if self.env_profile.device is None or policy.mode in {"local", "mock", "sftp"} and self.env_profile.device.protocol in {"mock", "local"}:
+        if self.env_profile.device is None or (policy.mode == "local" and self.env_profile.device.protocol == "local"):
             source = self.device.resolve_path(remote_path)
             if not source.exists():
                 raise StepExecutionError(self.step_context.node_name, f"remote transfer source not found: {source}")

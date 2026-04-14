@@ -18,4 +18,4 @@ env_profile:
     mode: sftp
     size_threshold_mb: 128
   metadata:
-    profile_name: ssh_device_mock
+    profile_name: ssh_device

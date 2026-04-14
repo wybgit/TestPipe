@@ -73,13 +73,6 @@ testpipe run-skill case-runner examples/templates/run_case_smoke.yaml --json
 testpipe run-skill case-runner examples/templates/run_case_smoke.yaml --json
 ```
 
-mock device 场景可直接使用:
-
-```bash
-testpipe run-skill case-runner examples/templates/run_case_mock_device.yaml --json
-testpipe run-skill case-runner examples/templates/run_case_mock_device_roundtrip.yaml --json
-```
-
 ### 4.5 分析结果
 
 ```bash
@@ -122,4 +115,4 @@ workspace/
 - TestPipe 当前不直接承载大模型调用
 - skill 之间的自动编排由外部代理负责
 - `EnvProfile` 已支持从 YAML/JSON 加载，但 Device/Transport 的真实执行能力仍在逐步补全
-- 当前已支持 mock device 环境下的 `transfer.put -> device.exec -> transfer.get` 闭环验证
+- 当前功能检查默认使用 `smoke` 用例

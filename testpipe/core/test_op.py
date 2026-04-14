@@ -14,6 +14,11 @@ class TestOp(ABC):
 
     spec: OpSpec
 
+    @classmethod
+    def op_name(cls) -> str:
+        name = cls.__name__
+        return name[:-2] if name.endswith("Op") else name
+
     def __init__(self, **attrs: Any):
         self.attrs = attrs
         self.validate_attrs()
@@ -25,9 +30,9 @@ class TestOp(ABC):
     def validate_attrs(self) -> None:
         for item in self.spec.attrs:
             if item.required and item.name not in self.attrs and item.default is None:
-                raise ValidationError(f"{self.spec.op_type} missing required attr: {item.name}")
+                raise ValidationError(f"{self.op_name()} missing required attr: {item.name}")
             if item.enum is not None and item.name in self.attrs and self.attrs[item.name] not in item.enum:
-                raise ValidationError(f"{self.spec.op_type} invalid attr {item.name}: {self.attrs[item.name]}")
+                raise ValidationError(f"{self.op_name()} invalid attr {item.name}: {self.attrs[item.name]}")
 
     def resolved_attrs(self) -> dict[str, Any]:
         resolved: dict[str, Any] = {}
