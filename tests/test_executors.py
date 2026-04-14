@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from testpipe.core.exceptions import StepExecutionError
 from testpipe.infra import ActionResult, DeviceExecutor, TransferExecutor
-from testpipe.spec import EnvProfile
+from testpipe.spec import EnvProfile, FrameworkConfig
 
 
 class _FakeActionRunner:
@@ -224,6 +224,53 @@ class ExecutorHardeningTest(unittest.TestCase):
             host_executor = HostExecutor(runner, step_context)
             with self.assertRaisesRegex(StepExecutionError, "ATC run failed: invalid option"):
                 host_executor.exec(["bash", "-lc", "false"])
+
+    def test_framework_config_resolves_enabled_named_env(self) -> None:
+        config = FrameworkConfig.from_dict(
+            {
+                "testpipe": {
+                    "default_env": "local",
+                    "envs": {
+                        "local": {"enabled": True, "host": {"mode": "local"}},
+                        "conda_ci": {"enabled": True, "host": {"mode": "conda", "conda_env": "aitest"}},
+                    },
+                }
+            }
+        )
+        profile = config.resolve_env_profile("conda_ci")
+        self.assertEqual(profile.host.mode, "conda")
+        self.assertEqual(profile.host.conda_env, "aitest")
+
+    def test_framework_config_rejects_disabled_env(self) -> None:
+        config = FrameworkConfig.from_dict(
+            {
+                "testpipe": {
+                    "default_env": "local",
+                    "envs": {
+                        "local": {"enabled": True, "host": {"mode": "local"}},
+                        "docker_ci": {"enabled": False, "host": {"mode": "docker", "docker_image": "testpipe:latest"}},
+                    },
+                }
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "disabled"):
+            config.resolve_env_profile("docker_ci")
+
+    def test_host_executor_wraps_command_for_conda_mode(self) -> None:
+        runner = _FakeActionRunner()
+        env_profile = EnvProfile.from_dict({"host": {"mode": "conda", "conda_env": "aitest"}})
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            step_context = self._step_context(tmp_dir)
+            from testpipe.infra.executors import HostExecutor
+
+            host_executor = HostExecutor(runner, step_context, env_profile)
+            host_executor.exec(["python3", "-V"], cwd=tmp_dir)
+
+        self.assertEqual(
+            runner.local_calls[0]["command"],
+            ["conda", "run", "-n", "aitest", "bash", "-lc", "python3 -V"],
+        )
+        self.assertEqual(runner.local_calls[0]["cwd"], tmp_dir)
 
 
 if __name__ == "__main__":

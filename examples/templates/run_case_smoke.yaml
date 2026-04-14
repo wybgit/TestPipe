@@ -1,5 +1,0 @@
-case_ref: examples/testcases/smoke.yaml
-output_dir: runs
-env_profile: examples/env_profiles/local_default.yaml
-debug: false
-execute: false

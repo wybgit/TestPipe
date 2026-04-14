@@ -3,8 +3,9 @@
 TestPipe 是一个基于 Pipeline 的测试编排框架，当前已打通最小主链路:
 
 - `YAML Case -> PipelineSpec -> TestEngine -> runs/`
-- 本机 Host 执行
+- 默认使用当前宿主机环境执行
 - SSH/SFTP 基础执行与传输命令层
+- 环境能力统一收敛到框架配置文件 `testpipe.config.yaml`
 - 默认输出精简结果，`--debug` 才输出定位文件
 - 模板/skill 驱动的生成、检查、执行、分析链路
 
@@ -43,76 +44,13 @@ SmokePipeline
 
 ### 4. 运行示例用例
 
-```bash
-testpipe run examples/testcases/smoke.yaml
-```
-
-预期输出类似:
-
-```json
-{
-  "case_id": "smoke_case",
-  "pipeline": "SmokePipeline",
-  "status": "passed",
-  "outputs": {
-    "echoed_message": "hello testpipe"
-  }
-}
-```
-
-也可以运行本地资源拉取、编译、传输的完整样例:
+当前 `examples/testcases/` 目录只保留一个主线案例，从 Git 仓拉取 ONNX 并通过 CANN `atc` 转换成 `om`:
 
 ```bash
-testpipe run examples/testcases/local_compile.yaml
+testpipe run examples/testcases/onnx_git_atc.yaml
 ```
 
-该样例会在 `resources/` 下得到稳定产物路径，适合作为后续设备执行链路的基础验证。
-
-如果需要验证“产物存在 + 断言通过”的本地闭环，可以运行:
-
-```bash
-testpipe run examples/testcases/local_compile_assert.yaml
-```
-
-该样例会在编译传输后追加 `PathExists -> ValueCompare` 断言链路，并输出 `path_exists` 与 `test_passed`。
-
-也可以运行 mock device 链路样例:
-
-```bash
-testpipe run examples/testcases/mock_device.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-```
-
-该样例会走 `transfer.put -> device.exec` 的完整链路，当前通过本地 mock device 工作空间模拟设备侧文件系统和命令执行。
-
-如果需要验证设备侧产物回传，也可以运行 round-trip 样例:
-
-```bash
-testpipe run examples/testcases/mock_device_roundtrip.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-```
-
-该样例会走 `transfer.put -> device.exec -> transfer.get` 的闭环链路，模拟设备侧生成输出文件后再下载回主机。
-
-如果需要验证“设备侧处理结果 + 业务断言”的完整链路，可以运行:
-
-```bash
-testpipe run examples/testcases/mock_device_uppercase.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-```
-
-该样例会走 `transfer.put -> device.exec -> transfer.get -> TextEquals`，模拟设备侧把文本转换为大写后下载回主机，并显式输出 `test_passed`。
-
-如果需要验证结构化 JSON 结果，可以运行:
-
-```bash
-testpipe run examples/testcases/mock_device_json.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-```
-
-该样例会走 `transfer.put -> device.exec -> transfer.get -> ReadJsonArtifact -> JsonObjectAssert`，模拟设备侧生成 `result.json` 并校验多个字段。
-
-如果需要运行真实主线案例，从 Git 仓拉取 ONNX 并通过 CANN `atc` 转换成 `om`，可以运行:
-
-```bash
-testpipe run examples/testcases/onnx_git_atc.yaml --env-profile examples/env_profiles/local_cann_atc.yaml
-```
+默认会直接使用仓库根目录 `testpipe.config.yaml` 中的默认环境，也就是当前宿主机本地环境。
 
 该样例会走 `ResourceFetch(git_dir) -> ATCCompile -> PathExists -> ValueCompare`，其中 `ATCCompile` 会执行:
 
@@ -128,14 +66,19 @@ atc --model=./Abs_testcase_5a6b43.onnx --framework=5 --output=Abs_testcase_5a6b4
 
 其中 `atc_options` 只用于追加额外参数，不会覆盖这 4 个保留主参数。
 
-如果需要传入额外的 `atc` 参数，可以在 case 中追加:
+如果需要传入额外的 `atc` 参数，可以在 `compileModelNode` 中追加:
 
 ```yaml
-inputs:
-  atc_options:
-    precision_mode: allow_fp32_to_fp16
-    input_format: NCHW
-    dynamic_batch_size: "1,4,8"
+pipeline:
+  name: OnnxGitAtcPipeline
+  compileModelNode:
+    atc_options:
+      precision_mode: allow_fp32_to_fp16
+      input_format: NCHW
+      dynamic_batch_size: "1,4,8"
+cases:
+  - case_id: onnx_git_atc_case
+    name: OnnxGitAtcPipeline_Basic
 ```
 
 这些参数会被转换为:
@@ -146,24 +89,39 @@ inputs:
 
 保留参数 `model / framework / output / soc_version` 不允许通过 `atc_options` 覆盖。
 
-如果需要显式指定环境配置，可以传入 `EnvProfile` 文件:
+环境配置现在建议统一写入框架配置文件 `testpipe.config.yaml`。默认行为:
+
+- 不传 `--env-profile` 时，使用配置文件中的 `default_env`
+- 仓库默认 `default_env=local`，即当前宿主机环境
+- `ssh / docker / conda` 等扩展环境必须先在配置文件中声明并 `enabled: true`
+
+例如默认 local:
 
 ```bash
-testpipe run examples/testcases/smoke.yaml --env-profile examples/env_profiles/local_default.yaml
+testpipe run examples/testcases/onnx_git_atc.yaml --env-profile local
 ```
 
-如果需要准备真实设备环境，可以参考 SSH/SFTP 环境模板:
+如果需要显式指定其他配置文件，可以传入:
 
 ```bash
-cat examples/env_profiles/ssh_device_mock.yaml
+testpipe run examples/testcases/onnx_git_atc.yaml --config /path/to/testpipe.config.yaml --env-profile local
 ```
 
-这个模板当前重点覆盖:
+仓库默认提供的 [testpipe.config.yaml](/home/wyb/AscendCode/TestPipe/testpipe.config.yaml) 当前只保留最小环境集合:
+
+- `local`
+- `docker`，默认禁用
+- `ssh`，默认禁用
+
+其中扩展环境配置重点覆盖:
 
 - `device.remote_root`: 统一约束远端文件路径根目录
 - `device.workdir`: 统一约束远端命令执行目录
 - `device.ssh_options`: 透传到 `ssh/scp`
 - `device.connect_timeout`: 连接超时配置
+- `host.mode`: `local / conda / docker`
+- `host.conda_env`: conda 模式目标环境名
+- `host.docker_image`: docker 模式目标镜像
 
 ### 5. 查看运行结果
 
@@ -179,7 +137,7 @@ cat examples/env_profiles/ssh_device_mock.yaml
 
 ```text
 runs/
-  smoke_case_YYYYMMDD_HHMMSS/
+  onnx_git_atc_case_YYYYMMDD_HHMMSS/
     summary.json
     execution.log
     resources/
@@ -188,13 +146,11 @@ runs/
 
 默认执行时，控制台和 `execution.log` 都会显式记录每个阶段的:
 
-- 节点类型: 输入 / 执行 / 输出
-- 输入参数
-- 执行参数与实际命令
-- 执行过程日志摘要
-- 输出结果
-- 校验内容与校验结果
-- 用例总结果、总耗时、运行目录
+- 节点类型: `INPUT / EXEC / OUTPUT`
+- `INPUT` 节点显示输入信息
+- `EXEC` 节点显示 `I / B / O`
+- `OUTPUT` 节点显示 `O / CHECK`
+- 控制台末尾显示单独的 `SUMMARY` 面板
 
 说明:
 
@@ -207,7 +163,7 @@ runs/
 如果需要排查问题，可以开启 `--debug`:
 
 ```bash
-testpipe run examples/testcases/smoke.yaml --debug
+testpipe run examples/testcases/onnx_git_atc.yaml --debug
 ```
 
 这时会额外输出:
@@ -242,46 +198,80 @@ runs/
 
 ### 7. 示例用例内容
 
-示例文件在 [smoke.yaml](/home/wyb/AscendCode/TestPipe/examples/testcases/smoke.yaml):
+示例文件在 [onnx_git_atc.yaml](/home/wyb/AscendCode/TestPipe/examples/testcases/onnx_git_atc.yaml):
 
 ```yaml
-test_case:
-  case_id: smoke_case
-  name: SmokePipeline_Basic
-  pipeline: SmokePipeline
-  inputs:
-    message: "hello testpipe"
-  expected:
-    echoed_message: "hello testpipe"
+pipeline:
+  name: OnnxGitAtcPipeline
+  fetchModelNode:
+    repo: https://github.com/wybgit/onnx-layer.git
+    path: Abs_testcase_5a6b43
+    model_pattern: "*.onnx"
+  compileModelNode:
+    soc_version: Ascend310P3
+    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
+  assertOmExistsNode:
+    expected_value: true
+cases:
+  - case_id: onnx_git_atc_case
+    description: 验证从Git仓获取ONNX并成功完成ATC转换
+    level: P0
 ```
+
+统一格式下，顶层只保留两部分:
+
+- `pipeline`: 声明目标 pipeline 名称和通用节点参数
+- `cases`: 只声明 case 信息和差异化节点参数覆盖
+
+每个节点配置都直接写成 `节点名: {输入参数k-v}`。通用参数写在 `pipeline` 段，对单个 case 的差异化覆盖写在 `cases[*]` 里。同名节点参数会按 case 覆盖 pipeline 默认值。
+
+说明:
+
+- `pipeline.name` 必填，表示当前文件绑定的目标 Pipeline
+- `pipeline` 下除 `name` 外，其余字段直接写节点名
+- `cases` 里 `case_id` 必填，`name` 可选；如果不写 `name`，默认回落为 `case_id`
+- `cases[*]` 支持用例级字段: `description`、`level`
+- `cases[*]` 下除这些用例字段外，其余字段都直接写节点名
+- `fetchModelNode.path` 可以是 Git 仓内目录，也可以是单个文件路径
+- `fetchModelNode.path` 为目录时下载该目录内容，为文件时只下载该文件
+- 断言值应该写到断言节点输入中，例如 `assertOmExistsNode.expected_value`
+- 节点输入会直接注入对应节点，不再要求先声明成 Pipeline 顶层输入
+- 如果某个端口已经由上游边连接驱动，就不应该再在用例里手动赋值
+- 当前示例节点命名统一推荐使用 `*Node` 后缀，Pipeline 命名统一使用 `*Pipeline` 后缀
+- 旧格式 `test_case` / `test_suite` 仍然兼容读取，但不再推荐继续新增
 
 ### 8. 模板与 Skill 快速链路
 
-当前已经支持用模板文件驱动常见流程:
+当前已经支持用结构化 payload 文件驱动常见流程。可以先用 `testpipe show-template <name>` 查看模板骨架，再把内容保存成自己的 YAML 文件后执行:
 
 1. 生成用例
 
 ```bash
-testpipe run-skill case-generator examples/templates/generate_case_smoke.yaml --json
+testpipe show-template case-template
+testpipe run-skill case-generator /path/to/case-generator-input.yaml --json
 ```
 
 2. 检查用例
 
 ```bash
-testpipe run-skill case-checker examples/templates/check_case_smoke.yaml --json
+testpipe show-template case-check-template
+testpipe run-skill case-checker /path/to/case-check-input.yaml --json
 ```
 
 3. 生成执行计划或直接执行
 
 ```bash
-testpipe run-skill case-runner examples/templates/run_case_smoke.yaml --json
+testpipe show-template run-template
+testpipe run-skill case-runner /path/to/run-input.yaml --json
 ```
 
 4. 生成算子或 Pipeline 脚手架
 
 ```bash
-testpipe run-skill test-op-generator examples/templates/generate_test_op_scaffold.yaml --json
-testpipe run-skill pipeline-generator examples/templates/generate_pipeline_scaffold.yaml --json
+testpipe show-template test-op-template
+testpipe run-skill test-op-generator /path/to/test-op-input.yaml --json
+testpipe show-template pipeline-template
+testpipe run-skill pipeline-generator /path/to/pipeline-input.yaml --json
 ```
 
 说明:
@@ -290,7 +280,7 @@ testpipe run-skill pipeline-generator examples/templates/generate_pipeline_scaff
 - 开启 scaffold 后，会按模板中的 `root_dir` 写入生成文件
 - `case-runner` 使用 `execute: false` 时只返回计划，`execute: true` 时会实际执行
 - `case-runner --json` 的执行阶段日志会出现在 `execution_console_log` 字段中，便于脚本消费
-- `case-runner` 支持从 `env_profile` 字段加载 YAML/JSON 环境文件
+- `case-runner` 支持从 `framework_config` 加载框架配置，并通过 `env_profile` 选择命名环境
 - 框架只内置 deterministic skills，不在框架内部承载大模型调用
 - 后续如果需要 AI 参与，可由 `OpenCode`、`Claude Code` 等外部代理填模板后调用 `run-skill`
 
@@ -315,7 +305,8 @@ testpipe run-skill pipeline-generator examples/templates/generate_pipeline_scaff
 - `run-skill` CLI 入口
 - `case-generator / case-checker / case-runner / result-analyzer`
 - `test-op-generator / pipeline-generator` 脚手架生成
-- `EnvProfile` YAML/JSON 加载与运行时注入
+- 默认框架配置加载与命名环境解析
+- 兼容 legacy `EnvProfile` YAML/JSON 直载方式
 - `DeviceExecutor` / `TransferExecutor` 的 mock 模式
 - SSH/SFTP 命令构建、远端根目录约束、远端目录预创建
 - `transfer.put / transfer.get / device.exec` trace 记录
@@ -338,6 +329,7 @@ testpipe run-skill pipeline-generator examples/templates/generate_pipeline_scaff
 - 统一执行主链路
 - 基础 Host / mock-device / SSH-SFTP 运行骨架
 - 一组可直接运行的内置 Pipeline 和示例用例
+- 示例目录当前只保留 `onnx_git_atc.yaml`
 - normal/debug 双模式输出
 - 模板/skill 驱动的生成、检查、执行、分析入口
 
@@ -346,35 +338,17 @@ testpipe run-skill pipeline-generator examples/templates/generate_pipeline_scaff
 ## 常用命令
 
 ```bash
-# 运行单个用例
-testpipe run examples/testcases/smoke.yaml
-
-# 运行本地编译断言样例
-testpipe run examples/testcases/local_compile_assert.yaml
-
 # 运行并输出调试文件
-testpipe run examples/testcases/smoke.yaml --debug
+testpipe run examples/testcases/onnx_git_atc.yaml --debug
 
-# 指定环境配置文件
-testpipe run examples/testcases/smoke.yaml --env-profile examples/env_profiles/local_default.yaml
+# 指定框架配置和命名环境
+testpipe run examples/testcases/onnx_git_atc.yaml --config testpipe.config.yaml --env-profile local
 
-# 运行 mock device 样例
-testpipe run examples/testcases/mock_device.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-
-# 运行 Git ONNX -> OM 主线案例
-testpipe run examples/testcases/onnx_git_atc.yaml --env-profile examples/env_profiles/local_cann_atc.yaml
-
-# 运行 mock device JSON 结果样例
-testpipe run examples/testcases/mock_device_json.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-
-# 运行 mock device round-trip 样例
-testpipe run examples/testcases/mock_device_roundtrip.yaml --env-profile examples/env_profiles/mock_device_local.yaml
-
-# 运行 mock device 业务校验样例
-testpipe run examples/testcases/mock_device_uppercase.yaml --env-profile examples/env_profiles/mock_device_local.yaml
+# 运行 Git ONNX -> OM 主线案例，默认使用当前宿主机 local 环境
+testpipe run examples/testcases/onnx_git_atc.yaml
 
 # 执行前先检查用例和 Pipeline 契约是否匹配
-testpipe check-case examples/testcases/smoke.yaml
+testpipe check-case examples/testcases/onnx_git_atc.yaml
 
 # 列出已注册 Pipeline
 testpipe list-pipelines
@@ -387,19 +361,14 @@ testpipe list-skills
 testpipe show-template case-template
 testpipe show-skill case-runner --json
 
-# 用模板输入直接执行 skill
-testpipe run-skill case-generator examples/templates/generate_case_smoke.yaml --json
-testpipe run-skill case-checker examples/templates/check_case_smoke.yaml --json
-testpipe run-skill case-runner examples/templates/run_case_smoke.yaml --json
-testpipe run-skill case-runner examples/templates/run_case_local_compile_assert.yaml --json
-testpipe run-skill case-runner examples/templates/run_case_onnx_git_atc.yaml --json
-testpipe run-skill case-runner examples/templates/run_case_mock_device_json.yaml --json
-testpipe run-skill case-runner examples/templates/run_case_mock_device.yaml --json
-testpipe run-skill case-runner examples/templates/run_case_mock_device_roundtrip.yaml --json
+# 用自定义 payload 文件直接执行 skill
+testpipe run-skill case-generator /path/to/case-generator-input.yaml --json
+testpipe run-skill case-checker /path/to/case-check-input.yaml --json
+testpipe run-skill case-runner /path/to/run-input.yaml --json
 
 # 直接生成脚手架文件
-testpipe run-skill test-op-generator examples/templates/generate_test_op_scaffold.yaml --json
-testpipe run-skill pipeline-generator examples/templates/generate_pipeline_scaffold.yaml --json
+testpipe run-skill test-op-generator /path/to/test-op-input.yaml --json
+testpipe run-skill pipeline-generator /path/to/pipeline-input.yaml --json
 
 # 运行测试
 python3 -m unittest discover -s tests -v

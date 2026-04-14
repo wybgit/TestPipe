@@ -55,15 +55,22 @@ register_template(
         description="Generate a structured CaseSpec and YAML testcase draft",
         body={
             "task_type": "generate_case",
-            "case_name": "",
-            "target_pipeline": "",
-            "test_goal": "",
-            "inputs": {},
-            "expected": {},
-            "dataset_mode": "single",
-            "tags": [],
-            "priority": "P2",
-            "environment_hint": "",
+            "pipeline": {
+                "name": "PipelineName",
+                "NodeName": {
+                    "input_name": "value",
+                },
+            },
+            "cases": [
+                {
+                    "case_id": "case_id",
+                    "description": "",
+                    "level": "P2",
+                    "NodeName": {
+                        "input_name": "override_value",
+                    },
+                }
+            ],
         },
     )
 )
@@ -92,6 +99,7 @@ register_template(
             "task_type": "run_case",
             "case_ref": "",
             "pipeline_ref": "",
+            "framework_config": "",
             "env_profile": "",
             "output_dir": "",
             "log_level": "INFO",

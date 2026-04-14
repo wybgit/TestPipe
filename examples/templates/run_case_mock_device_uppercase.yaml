@@ -1,5 +1,0 @@
-case_ref: examples/testcases/mock_device_uppercase.yaml
-output_dir: runs
-env_profile: examples/env_profiles/mock_device_local.yaml
-debug: false
-execute: false

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from testpipe.core import get_op_class
 from testpipe.spec import CaseCheckReport, IssueSpec
 
 
@@ -24,8 +25,21 @@ class CaseChecker:
 
         input_names = {item.name for item in pipeline_spec.inputs}
         required_input_names = {item.name for item in pipeline_spec.inputs if item.required}
+        node_specs = pipeline_spec.node_map()
+        edge_targets: dict[str, set[str]] = {}
+        for edge in pipeline_spec.edges:
+            edge_targets.setdefault(edge.target_node, set()).add(edge.target_port)
 
-        for missing_name in sorted(required_input_names - set(case_spec.inputs.keys())):
+        satisfied_pipeline_inputs = set(case_spec.inputs.keys())
+        for node_name, node_inputs in case_spec.inputs_by_node.items():
+            connected_ports = edge_targets.get(node_name, set())
+            for port_name in node_inputs:
+                if port_name in connected_ports:
+                    continue
+                if port_name in input_names:
+                    satisfied_pipeline_inputs.add(port_name)
+
+        for missing_name in sorted(required_input_names - satisfied_pipeline_inputs):
             issues.append(
                 IssueSpec(
                     level="error",
@@ -45,6 +59,43 @@ class CaseChecker:
             )
             fix_suggestions.append(f"确认是否需要删除 inputs.{extra_name} 或更新 Pipeline 输入定义")
 
+        for node_name, node_inputs in sorted(case_spec.inputs_by_node.items()):
+            if node_name not in node_specs:
+                issues.append(
+                    IssueSpec(
+                        level="error",
+                        field=f"inputs_by_node.{node_name}",
+                        message="node is not declared in pipeline graph",
+                    )
+                )
+                fix_suggestions.append(f"将 inputs_by_node.{node_name} 修正为 Pipeline 中真实存在的节点名")
+                continue
+
+            node_spec = node_specs[node_name]
+            op_class = get_op_class(node_spec.op_type)
+            op_input_names = {item.name for item in op_class.spec.inputs}
+            connected_ports = edge_targets.get(node_name, set())
+            for port_name in sorted(node_inputs):
+                if port_name not in op_input_names:
+                    issues.append(
+                        IssueSpec(
+                            level="error",
+                            field=f"inputs_by_node.{node_name}.{port_name}",
+                            message=f"port is not declared by op '{node_spec.op_type}'",
+                        )
+                    )
+                    fix_suggestions.append(f"检查节点 {node_name} 的输入端口名，删除或修正 {port_name}")
+                    continue
+                if port_name in connected_ports:
+                    issues.append(
+                        IssueSpec(
+                            level="error",
+                            field=f"inputs_by_node.{node_name}.{port_name}",
+                            message="port is driven by an upstream edge; testcase assignment would be overwritten",
+                        )
+                    )
+                    fix_suggestions.append(f"不要在用例里为 {node_name}.{port_name} 赋值，改为修改其上游节点或 Pipeline 设计")
+
         output_names = {item.name for item in pipeline_spec.outputs}
         for expected_name in sorted(case_spec.expected.keys()):
             if expected_name in output_names:
@@ -57,16 +108,6 @@ class CaseChecker:
                 )
             )
             fix_suggestions.append(f"删除 expected.{expected_name} 或把该输出加入 Pipeline outputs")
-
-        if not case_spec.expected:
-            issues.append(
-                IssueSpec(
-                    level="warn",
-                    field="expected",
-                    message="expected is empty; execution can run, but there is no business assertion",
-                )
-            )
-            fix_suggestions.append("补充至少一个业务断言到 expected")
 
         has_error = any(item.level == "error" for item in issues)
         has_warn = any(item.level == "warn" for item in issues)

@@ -1,0 +1,46 @@
+testpipe:
+  default_env: local
+  envs:
+    local:
+      enabled: true
+      host:
+        mode: local
+      transport:
+        mode: local
+        size_threshold_mb: 50
+      metadata:
+        profile_name: local
+
+    docker:
+      enabled: false
+      host:
+        mode: docker
+        docker_image: testpipe:latest
+        docker_run_args:
+          - --network=host
+      transport:
+        mode: local
+        size_threshold_mb: 50
+      metadata:
+        profile_name: docker
+
+    ssh:
+      enabled: false
+      host:
+        mode: local
+      device:
+        protocol: ssh
+        host: 192.168.10.20
+        port: 22
+        user: root
+        workdir: workspace
+        remote_root: /srv/testpipe
+        ssh_options:
+          - StrictHostKeyChecking=no
+          - UserKnownHostsFile=/dev/null
+        connect_timeout: 15
+      transport:
+        mode: sftp
+        size_threshold_mb: 128
+      metadata:
+        profile_name: ssh

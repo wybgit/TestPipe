@@ -159,22 +159,23 @@ expected_artifacts: []
 
 ```yaml
 task_type: generate_case
-case_name: ""
-target_pipeline: ""
-test_goal: ""
-inputs: {}
-expected: {}
-dataset_mode: single
-tags: []
-priority: P2
-environment_hint: ""
+pipeline:
+  name: PipelineName
+  NodeName:
+    input_name: value
+cases:
+  - case_id: case_id
+    description: ""
+    level: P2
+    NodeName:
+      input_name: override_value
 ```
 
 ### 期望输出
 
 - `CaseSpec`
 - YAML 用例文件
-- 如需批量场景，输出 CSV/Excel 列定义建议
+- 如需批量场景，输出同一文件下多个 `cases` 条目
 
 ---
 

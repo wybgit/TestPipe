@@ -260,16 +260,16 @@ class OnnxGitAtcPipeline(Pipeline):
         )
 
         self.set_stage("prepare")
-        self.add_step("env_check", EnvCheckOp())
-        self.add_step("fetch_model", ResourceFetchOp())
+        self.add_step("envCheckNode", EnvCheckOp())
+        self.add_step("fetchModelNode", ResourceFetchOp())
 
         self.set_stage("compile")
-        self.add_step("compile_model", ATCCompileOp(output_name="model.om", timeout=600))
+        self.add_step("compileModelNode", ATCCompileOp(output_name="model.om", timeout=600))
 
         self.set_stage("assert")
-        self.add_step("check_om_exists", PathExistsOp())
-        self.add_step("assert_om_exists", ValueCompareOp(operator="eq", expected_value=True))
+        self.add_step("checkOmExistsNode", PathExistsOp())
+        self.add_step("assertOmExistsNode", ValueCompareOp(operator="eq", expected_value=True))
 
-        self.connect("fetch_model.model_path", "compile_model.model_path")
-        self.connect("compile_model.om_path", "check_om_exists.target_path")
-        self.connect("check_om_exists.path_exists", "assert_om_exists.actual_value")
+        self.connect("fetchModelNode.model_path", "compileModelNode.model_path")
+        self.connect("compileModelNode.om_path", "checkOmExistsNode.target_path")
+        self.connect("checkOmExistsNode.path_exists", "assertOmExistsNode.actual_value")

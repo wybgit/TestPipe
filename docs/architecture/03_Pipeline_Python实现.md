@@ -444,22 +444,21 @@ class Dynamic_Pipeline(Pipeline):
 ### 7.1 YAML引用Python Pipeline
 
 ```yaml
-# testcases/resnet50_fp16.yaml
-test_case:
-  name: ResNet50_FP16_Test
-  pipeline: ATC_E2E_Pipeline  # 引用Python定义的Pipeline
-  
-  inputs:
-    model_source: "models/resnet50.onnx"
-    soc_version: "Ascend310P3"
-    input_data:
-      file: "data/resnet50_input.bin"
-    golden_output:
-      file: "data/resnet50_golden.bin"
-  
-  expected:
-    test_passed: true
-    accuracy_score: ">= 0.99"
+pipeline:
+  name: OnnxGitAtcPipeline
+  fetchModelNode:
+    repo: https://github.com/wybgit/onnx-layer.git
+    path: Abs_testcase_5a6b43
+    model_pattern: "*.onnx"
+  compileModelNode:
+    soc_version: Ascend310P3
+    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
+  assertOmExistsNode:
+    expected_value: true
+cases:
+  - case_id: onnx_git_atc_case
+    description: 验证 Git 模型资源获取与 ATC 转换
+    level: P0
 ```
 
 ### 7.2 TestCaseLoader加载
@@ -521,16 +520,16 @@ testpipe/
 testpipe list-pipelines
 
 # 查看Pipeline详情
-testpipe describe-pipeline ATC_E2E_Pipeline
+testpipe describe-pipeline OnnxGitAtcPipeline
 
 # 运行TestCase(自动加载Pipeline)
-testpipe run testcases/resnet50_fp16.yaml
+testpipe run examples/testcases/onnx_git_atc.yaml
 
 # 导出Pipeline为JSON(用于可视化)
-testpipe export-pipeline ATC_E2E_Pipeline --format json --output pipeline.json
+testpipe export-pipeline OnnxGitAtcPipeline --format json --output pipeline.json
 
 # 导出为ONNX
-testpipe export-pipeline ATC_E2E_Pipeline --format onnx --output pipeline.onnx
+testpipe export-pipeline OnnxGitAtcPipeline --format onnx --output pipeline.onnx
 ```
 
 ---

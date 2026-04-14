@@ -11,9 +11,10 @@ from testpipe.core.exceptions import StepExecutionError
 class HostExecutor:
     """Local host executor for the initial MVP."""
 
-    def __init__(self, action_runner, step_context) -> None:
+    def __init__(self, action_runner, step_context, env_profile=None) -> None:
         self.action_runner = action_runner
         self.step_context = step_context
+        self.env_profile = env_profile
 
     def exec(
         self,
@@ -23,18 +24,75 @@ class HostExecutor:
         cwd: str | None = None,
         env: dict[str, str] | None = None,
     ):
+        prepared_command, prepared_cwd, prepared_env = self._prepare_command(command, cwd=cwd, env=env)
         result = self.action_runner.run_local(
-            command,
+            prepared_command,
             step_name=self.step_context.node_name,
             stdout_log=Path(self.step_context.stdout_log_path),
             stderr_log=Path(self.step_context.stderr_log_path),
-            cwd=cwd,
-            env=env,
+            cwd=prepared_cwd,
+            env=prepared_env,
             timeout=timeout,
         )
         if result.returncode != 0:
-            raise StepExecutionError(self.step_context.node_name, self._failure_message(result, command))
+            raise StepExecutionError(self.step_context.node_name, self._failure_message(result, prepared_command))
         return result
+
+    def _prepare_command(
+        self,
+        command: str | list[str],
+        *,
+        cwd: str | None,
+        env: dict[str, str] | None,
+    ) -> tuple[str | list[str], str | None, dict[str, str] | None]:
+        if self.env_profile is None:
+            return command, cwd, env
+
+        host = self.env_profile.host
+        mode = host.mode or "local"
+        if mode == "local":
+            return command, cwd, env
+
+        rendered_command = command if isinstance(command, str) else shlex.join([str(item) for item in command])
+
+        if mode == "conda":
+            if not host.conda_env:
+                raise StepExecutionError(self.step_context.node_name, "host.conda_env is required for conda mode")
+            return ["conda", "run", "-n", host.conda_env, "bash", "-lc", rendered_command], cwd, env
+
+        if mode == "docker":
+            if not host.docker_image:
+                raise StepExecutionError(self.step_context.node_name, "host.docker_image is required for docker mode")
+            mount_paths = self._docker_mount_paths(cwd)
+            docker_command = ["docker", "run", "--rm"]
+            for path in mount_paths:
+                docker_command.extend(["-v", f"{path}:{path}"])
+            for item in host.docker_run_args:
+                docker_command.append(item)
+            if env:
+                for key, value in env.items():
+                    docker_command.extend(["-e", f"{key}={value}"])
+            docker_command.extend(
+                [
+                    "-w",
+                    cwd or host.workdir or str(Path.cwd().resolve()),
+                    host.docker_image,
+                    "bash",
+                    "-lc",
+                    rendered_command,
+                ]
+            )
+            return docker_command, None, None
+
+        raise StepExecutionError(self.step_context.node_name, f"unsupported host mode: {mode}")
+
+    def _docker_mount_paths(self, cwd: str | None) -> list[str]:
+        candidates = {str(Path.cwd().resolve()), "/tmp"}
+        if cwd:
+            candidates.add(str(Path(cwd).resolve()))
+        if self.env_profile is not None and self.env_profile.host.workdir:
+            candidates.add(str(Path(self.env_profile.host.workdir).resolve()))
+        return sorted(path for path in candidates if Path(path).exists())
 
     def _failure_message(self, result, command: str | list[str]) -> str:
         detail = (result.stderr or "").strip() or (result.stdout or "").strip()

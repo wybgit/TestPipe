@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from testpipe import bootstrap
 from testpipe.core import PipelineCompiler, create_pipeline
@@ -124,15 +125,12 @@ class AtcMainlineFlowTest(unittest.TestCase):
             repo_dir, commit = self._create_git_resource_repo(Path(tmp_dir))
             context = self._build_step_context(
                 Path(tmp_dir),
-                node_name="fetch_model",
+                node_name="fetchModelNode",
                 inputs={
-                    "resource_ref": {
-                        "kind": "git_dir",
-                        "repo": repo_dir,
-                        "ref": "Abs",
-                        "subpath": "Abs_testcase_5a6b43",
-                        "model_pattern": "*.onnx",
-                    }
+                    "repo": repo_dir,
+                    "ref": "Abs",
+                    "path": "Abs_testcase_5a6b43",
+                    "model_pattern": "*.onnx",
                 },
                 attrs={},
             )
@@ -142,7 +140,47 @@ class AtcMainlineFlowTest(unittest.TestCase):
             self.assertTrue(Path(outputs["model_path"]).exists())
             self.assertEqual(Path(outputs["resource_root"]).name, "Abs_testcase_5a6b43")
             self.assertEqual(Path(outputs["model_path"]).name, "Abs_testcase_5a6b43.onnx")
-            self.assertFalse((Path(tmp_dir) / "run" / "steps" / "fetch_model" / "git_materialized").exists())
+            self.assertFalse((Path(tmp_dir) / "run" / "steps" / "fetchModelNode" / "git_materialized").exists())
+
+    def test_resource_fetch_op_can_fallback_to_github_archive(self) -> None:
+        bootstrap()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            archive_root = Path(tmp_dir) / "archive" / "onnx-layer-commit"
+            resource_dir = archive_root / "Abs_testcase_5a6b43" / "resources"
+            resource_dir.mkdir(parents=True, exist_ok=True)
+            (resource_dir / "Abs_testcase_5a6b43.onnx").write_text("fake onnx payload\n", encoding="utf-8")
+            context = self._build_step_context(
+                Path(tmp_dir),
+                node_name="fetchModelNode",
+                inputs={
+                    "repo": "https://github.com/wybgit/onnx-layer.git",
+                    "ref": "Abs",
+                    "path": "Abs_testcase_5a6b43",
+                    "model_pattern": "*.onnx",
+                },
+                attrs={},
+            )
+
+            def fake_git_fetch(*args, **kwargs):
+                raise RuntimeError("simulated git transport failure")
+
+            def fake_archive_fetch(step_context, *, repo, subpath, git_ref, target_root, cause):
+                self.assertEqual(repo, "https://github.com/wybgit/onnx-layer.git")
+                self.assertEqual(git_ref, "Abs")
+                self.assertEqual(subpath, "Abs_testcase_5a6b43")
+                materialized_path = ResourceFetchOp()._materialize_local_resource(archive_root / subpath, target_root)  # noqa: SLF001
+                return materialized_path, "archive_commit"
+
+            with (
+                patch.object(ResourceFetchOp, "_fetch_git_dir_via_git", side_effect=fake_git_fetch),
+                patch.object(ResourceFetchOp, "_fetch_git_dir_via_github_archive", side_effect=fake_archive_fetch),
+            ):
+                outputs = ResourceFetchOp().execute(context)
+
+            self.assertEqual(outputs["resolved_commit"], "archive_commit")
+            self.assertTrue(Path(outputs["resource_root"]).exists())
+            self.assertEqual(Path(outputs["resource_root"]).name, "Abs_testcase_5a6b43")
+            self.assertEqual(Path(outputs["model_path"]).name, "Abs_testcase_5a6b43.onnx")
 
     def test_atc_compile_op_supports_extra_args(self) -> None:
         bootstrap()
@@ -153,7 +191,7 @@ class AtcMainlineFlowTest(unittest.TestCase):
             model_path.write_text("fake model\n", encoding="utf-8")
             context = self._build_step_context(
                 Path(tmp_dir),
-                node_name="compile_model",
+                node_name="compileModelNode",
                 inputs={
                     "model_path": str(model_path),
                     "soc_version": "Ascend310P3",
@@ -179,7 +217,7 @@ class AtcMainlineFlowTest(unittest.TestCase):
                 [
                     f"--model={model_path}",
                     "--framework=5",
-                    f"--output={Path(tmp_dir) / 'run' / 'steps' / 'compile_model' / 'custom_model'}",
+                    f"--output={Path(tmp_dir) / 'run' / 'steps' / 'compileModelNode' / 'custom_model'}",
                     "--soc_version=Ascend310P3",
                 ],
             )
@@ -220,20 +258,24 @@ class AtcMainlineFlowTest(unittest.TestCase):
                 case_id="onnx_git_atc_case",
                 name="OnnxGitAtcPipeline_Basic",
                 pipeline="OnnxGitAtcPipeline",
-                inputs={
-                    "resource_ref": {
-                        "kind": "git_dir",
+                inputs={},
+                inputs_by_node={
+                    "fetchModelNode": {
                         "repo": repo_dir,
                         "ref": "Abs",
-                        "subpath": "Abs_testcase_5a6b43",
+                        "path": "Abs_testcase_5a6b43",
                         "model_pattern": "*.onnx",
                     },
-                    "soc_version": "Ascend310P3",
-                    "env_script": env_script,
-                    "output_name": "abs_model.om",
-                    "atc_options": {"precision_mode": "allow_fp32_to_fp16"},
+                    "compileModelNode": {
+                        "soc_version": "Ascend310P3",
+                        "env_script": env_script,
+                        "output_name": "abs_model.om",
+                        "atc_options": {"precision_mode": "allow_fp32_to_fp16"},
+                    },
+                    "assertOmExistsNode": {
+                        "expected_value": True,
+                    },
                 },
-                expected={"path_exists": True, "test_passed": True},
             )
             pipeline = create_pipeline(case.pipeline)
             pipeline_spec = PipelineCompiler().compile(pipeline)

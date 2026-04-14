@@ -15,9 +15,17 @@ from testpipe.spec import EnvProfile
 
 
 class SmokeFrameworkTest(unittest.TestCase):
+    def _load_case(self, payload: dict[object, object]) -> object:
+        return TestCaseLoader().load_data(payload)
+
     def test_smoke_pipeline_executes_in_normal_mode(self) -> None:
         bootstrap()
-        case = TestCaseLoader().load("examples/testcases/smoke.yaml")
+        case = self._load_case(
+            {
+                "pipeline": {"name": "SmokePipeline"},
+                "cases": [{"case_id": "smoke_case", "name": "SmokePipeline_Basic", "echo": {"message": "hello testpipe"}}],
+            }
+        )
         pipeline = create_pipeline(case.pipeline)
         pipeline_spec = PipelineCompiler().compile(pipeline)
 
@@ -61,7 +69,12 @@ class SmokeFrameworkTest(unittest.TestCase):
 
     def test_smoke_pipeline_executes_in_debug_mode(self) -> None:
         bootstrap()
-        case = TestCaseLoader().load("examples/testcases/smoke.yaml")
+        case = self._load_case(
+            {
+                "pipeline": {"name": "SmokePipeline"},
+                "cases": [{"case_id": "smoke_case", "name": "SmokePipeline_Basic", "echo": {"message": "hello testpipe"}}],
+            }
+        )
         pipeline = create_pipeline(case.pipeline)
         pipeline_spec = PipelineCompiler().compile(pipeline)
 
@@ -86,7 +99,18 @@ class SmokeFrameworkTest(unittest.TestCase):
 
     def test_local_compile_pipeline_materializes_transferred_artifact(self) -> None:
         bootstrap()
-        case = TestCaseLoader().load("examples/testcases/local_compile.yaml")
+        case = self._load_case(
+            {
+                "pipeline": {"name": "LocalCompilePipeline"},
+                "cases": [
+                    {
+                        "case_id": "local_compile_case",
+                        "name": "LocalCompilePipeline_Basic",
+                        "fetch_model": {"resource_path": "examples/assets/mock_model.onnx"},
+                    }
+                ],
+            }
+        )
         pipeline = create_pipeline(case.pipeline)
         pipeline_spec = PipelineCompiler().compile(pipeline)
 
@@ -103,7 +127,21 @@ class SmokeFrameworkTest(unittest.TestCase):
 
     def test_local_compile_assert_pipeline_reports_path_exists_and_passed(self) -> None:
         bootstrap()
-        case = TestCaseLoader().load("examples/testcases/local_compile_assert.yaml")
+        case = self._load_case(
+            {
+                "pipeline": {
+                    "name": "LocalCompileAssertPipeline",
+                    "assert_remote_path": {"expected_value": True},
+                },
+                "cases": [
+                    {
+                        "case_id": "local_compile_assert_case",
+                        "name": "LocalCompileAssertPipeline_Basic",
+                        "fetch_model": {"resource_path": "examples/assets/mock_model.onnx"},
+                    }
+                ],
+            }
+        )
         pipeline = create_pipeline(case.pipeline)
         pipeline_spec = PipelineCompiler().compile(pipeline)
 
@@ -133,7 +171,18 @@ class SmokeFrameworkTest(unittest.TestCase):
 
     def test_mock_device_pipeline_executes_with_mock_env_profile(self) -> None:
         bootstrap()
-        case = TestCaseLoader().load("examples/testcases/mock_device.yaml")
+        case = self._load_case(
+            {
+                "pipeline": {"name": "MockDevicePipeline"},
+                "cases": [
+                    {
+                        "case_id": "mock_device_case",
+                        "name": "MockDevicePipeline_Basic",
+                        "write_message": {"message": "hello mock device"},
+                    }
+                ],
+            }
+        )
         pipeline = create_pipeline(case.pipeline)
         pipeline_spec = PipelineCompiler().compile(pipeline)
         env_profile = EnvProfile.from_dict(
@@ -156,7 +205,18 @@ class SmokeFrameworkTest(unittest.TestCase):
 
     def test_mock_device_roundtrip_pipeline_downloads_device_artifact(self) -> None:
         bootstrap()
-        case = TestCaseLoader().load("examples/testcases/mock_device_roundtrip.yaml")
+        case = self._load_case(
+            {
+                "pipeline": {"name": "MockDeviceRoundTripPipeline"},
+                "cases": [
+                    {
+                        "case_id": "mock_device_roundtrip_case",
+                        "name": "MockDeviceRoundTripPipeline_Basic",
+                        "write_message": {"message": "hello roundtrip"},
+                    }
+                ],
+            }
+        )
         pipeline = create_pipeline(case.pipeline)
         pipeline_spec = PipelineCompiler().compile(pipeline)
         env_profile = EnvProfile.from_dict(
@@ -179,7 +239,19 @@ class SmokeFrameworkTest(unittest.TestCase):
 
     def test_mock_device_uppercase_pipeline_transforms_and_asserts_result(self) -> None:
         bootstrap()
-        case = TestCaseLoader().load("examples/testcases/mock_device_uppercase.yaml")
+        case = self._load_case(
+            {
+                "pipeline": {"name": "MockDeviceUppercasePipeline"},
+                "cases": [
+                    {
+                        "case_id": "mock_device_uppercase_case",
+                        "name": "MockDeviceUppercasePipeline_Basic",
+                        "write_message": {"message": "hello ascend"},
+                        "compare_result": {"expected_text": "HELLO ASCEND"},
+                    }
+                ],
+            }
+        )
         pipeline = create_pipeline(case.pipeline)
         pipeline_spec = PipelineCompiler().compile(pipeline)
         env_profile = EnvProfile.from_dict(
@@ -215,7 +287,25 @@ class SmokeFrameworkTest(unittest.TestCase):
 
     def test_mock_device_json_pipeline_generates_and_asserts_structured_result(self) -> None:
         bootstrap()
-        case = TestCaseLoader().load("examples/testcases/mock_device_json.yaml")
+        case = self._load_case(
+            {
+                "pipeline": {"name": "MockDeviceJsonPipeline"},
+                "cases": [
+                    {
+                        "case_id": "mock_device_json_case",
+                        "name": "MockDeviceJsonPipeline_Basic",
+                        "write_message": {"message": "hello json"},
+                        "assert_json": {
+                            "expected_json": {
+                                "status": "ok",
+                                "message": "HELLO JSON",
+                                "metrics.score": 1.0,
+                            }
+                        },
+                    }
+                ],
+            }
+        )
         pipeline = create_pipeline(case.pipeline)
         pipeline_spec = PipelineCompiler().compile(pipeline)
         env_profile = EnvProfile.from_dict(

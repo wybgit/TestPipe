@@ -35,7 +35,7 @@ class LLMAssetRegistryTest(unittest.TestCase):
         )
         template = get_template("case-template")
         self.assertEqual(template.task_type, "generate_case")
-        self.assertEqual(template.body["priority"], "P2")
+        self.assertEqual(template.body["pipeline"]["name"], "PipelineName")
 
     def test_builtin_skills_are_registered(self) -> None:
         bootstrap()
@@ -70,8 +70,14 @@ class LLMAssetRegistryTest(unittest.TestCase):
 
     def test_case_checker_reports_missing_required_input(self) -> None:
         bootstrap()
-        case = TestCaseLoader().load("examples/testcases/smoke.yaml")
+        case = TestCaseLoader().load_data(
+            {
+                "pipeline": {"name": "SmokePipeline"},
+                "cases": [{"case_id": "smoke_case", "name": "SmokePipeline_Basic", "echo": {"message": "hello"}}],
+            }
+        )
         case.inputs.pop("message")
+        case.inputs_by_node["echo"].pop("message")
         pipeline_spec = PipelineCompiler().compile(create_pipeline(case.pipeline))
 
         report = CaseChecker().check(case, pipeline_spec)

@@ -44,8 +44,7 @@ coverage.xml
 nosetests.xml
 junit*.xml
 
-# Runtime artifacts for TestPipe / TGE
-.tge_work/
+# Runtime artifacts for TestPipe
 .testpipe/
 runs/
 runs*/
@@ -64,3 +63,6 @@ reproduce.sh
 docs/build/
 docs/_build/
 site/
+
+# Files
+fusion_result.json

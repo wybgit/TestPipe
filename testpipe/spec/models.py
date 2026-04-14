@@ -114,6 +114,9 @@ class CaseSpec:
     name: str
     pipeline: str
     inputs: dict[str, Any]
+    inputs_by_node: dict[str, dict[str, Any]] = field(default_factory=dict)
+    variables: dict[str, Any] = field(default_factory=dict)
+    description: str = ""
     expected: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
     priority: str = "P2"
@@ -179,7 +182,9 @@ class CaseCheckReport:
 class HostConfig:
     mode: str = "local"
     workdir: str | None = None
+    conda_env: str | None = None
     docker_image: str | None = None
+    docker_run_args: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any] | None) -> "HostConfig":
@@ -187,7 +192,9 @@ class HostConfig:
         return cls(
             mode=payload.get("mode", "local"),
             workdir=payload.get("workdir"),
+            conda_env=payload.get("conda_env"),
             docker_image=payload.get("docker_image"),
+            docker_run_args=list(payload.get("docker_run_args", [])),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -269,4 +276,93 @@ class EnvProfile:
             "device": None if self.device is None else self.device.to_dict(),
             "transport": None if self.transport is None else self.transport.to_dict(),
             "metadata": self.metadata,
+        }
+
+
+@dataclass(slots=True)
+class FrameworkEnvBinding:
+    enabled: bool = True
+    profile: EnvProfile = field(default_factory=EnvProfile.local_default)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any] | None) -> "FrameworkEnvBinding":
+        payload = payload or {}
+        raw_profile = payload.get("env_profile", payload.get("profile"))
+        if raw_profile is None:
+            raw_profile = {
+                key: value
+                for key, value in payload.items()
+                if key not in {"enabled", "env_profile", "profile"}
+            }
+        if not isinstance(raw_profile, dict):
+            raise ValueError("framework env binding profile must be a mapping")
+        return cls(
+            enabled=bool(payload.get("enabled", True)),
+            profile=EnvProfile.from_dict(raw_profile),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "env_profile": self.profile.to_dict(),
+        }
+
+
+@dataclass(slots=True)
+class FrameworkConfig:
+    default_env: str = "local"
+    envs: dict[str, FrameworkEnvBinding] = field(default_factory=dict)
+
+    @classmethod
+    def default(cls) -> "FrameworkConfig":
+        return cls(
+            default_env="local",
+            envs={
+                "local": FrameworkEnvBinding(
+                    enabled=True,
+                    profile=EnvProfile.local_default(),
+                )
+            },
+        )
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any] | None) -> "FrameworkConfig":
+        if not payload:
+            return cls.default()
+        raw = payload.get("testpipe", payload)
+        if not isinstance(raw, dict):
+            raise ValueError("framework config document must be a mapping")
+        envs_raw = raw.get("envs", raw.get("profiles", {}))
+        if not isinstance(envs_raw, dict):
+            raise ValueError("framework config envs/profiles must be a mapping")
+        envs = {
+            str(name): FrameworkEnvBinding.from_dict(item if isinstance(item, dict) else {})
+            for name, item in envs_raw.items()
+        }
+        config = cls(
+            default_env=str(raw.get("default_env", raw.get("default_profile", "local"))),
+            envs=envs or cls.default().envs,
+        )
+        if config.default_env not in config.envs:
+            if config.default_env == "local":
+                config.envs.setdefault("local", FrameworkEnvBinding(enabled=True, profile=EnvProfile.local_default()))
+            else:
+                raise ValueError(f"default env not found in framework config: {config.default_env}")
+        return config
+
+    def resolve_env_profile(self, ref: str | None = None) -> EnvProfile:
+        name = ref or self.default_env
+        if name in {"", "local_default"} and name not in self.envs:
+            return EnvProfile.local_default()
+        binding = self.envs.get(name)
+        if binding is None:
+            raise ValueError(f"env profile not found in framework config: {name}")
+        if not binding.enabled:
+            raise ValueError(f"env profile is disabled in framework config: {name}")
+        return binding.profile
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "default_env": self.default_env,
+            "envs": {name: item.to_dict() for name, item in self.envs.items()},
         }

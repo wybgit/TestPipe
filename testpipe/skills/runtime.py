@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -11,9 +12,9 @@ from typing import Any
 
 import yaml
 
-from testpipe.core import PipelineCompiler, create_pipeline
+from testpipe.core import PipelineCompiler, create_pipeline, get_op_class
 from testpipe.engine import TestEngine
-from testpipe.loaders import EnvProfileLoader, StructuredLoader, TestCaseLoader
+from testpipe.loaders import EnvProfileLoader, FrameworkConfigLoader, StructuredLoader, TestCaseLoader
 from testpipe.skills.registry import get_skill
 from testpipe.spec import CaseSpec, EnvProfile, PipelineSpec, PortSpec
 from testpipe.validation import CaseChecker
@@ -113,22 +114,40 @@ def _apply_pipeline_scaffold(payload: dict[str, Any], result: dict[str, Any]) ->
     return result
 
 
-def _load_case_from_payload(payload: dict[str, Any]) -> CaseSpec:
+def _aggregate_reports(reports: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
+    statuses = [report["status"] for _, report in reports]
+    status = "fail" if "fail" in statuses else "warn" if "warn" in statuses else "pass"
+    return {
+        "status": status,
+        "case_count": len(reports),
+        "cases": [
+            {
+                "case_id": case_id,
+                **report,
+            }
+            for case_id, report in reports
+        ],
+    }
+
+
+def _load_cases_from_payload(payload: dict[str, Any]) -> list[CaseSpec]:
+    loader = TestCaseLoader()
+    case_id = payload.get("case_id")
     if payload.get("case_ref"):
-        return TestCaseLoader().load(payload["case_ref"])
+        if case_id is not None:
+            return [loader.load(payload["case_ref"], case_id=case_id)]
+        return loader.load_many(payload["case_ref"])
     if payload.get("case_spec"):
         raw = payload["case_spec"]
-        return CaseSpec(
-            case_id=raw.get("case_id", raw["name"]),
-            name=raw["name"],
-            pipeline=raw["pipeline"],
-            inputs=raw.get("inputs", {}),
-            expected=raw.get("expected", {}),
-            tags=raw.get("tags", []),
-            priority=raw.get("priority", "P2"),
-            timeout=raw.get("timeout"),
-            metadata=raw.get("metadata", {}),
-        )
+        if isinstance(raw, dict) and ("pipeline" in raw and "cases" in raw):
+            document = raw
+        elif isinstance(raw, dict) and ("testcases" in raw or "test_case" in raw or "test_suite" in raw):
+            document = raw
+        else:
+            document = {"test_case": raw}
+        if case_id is not None:
+            return [loader.load_data(document, source="<inline>", case_id=case_id)]
+        return loader.load_many_data(document, source="<inline>")
     raise ValueError("case_ref or case_spec is required")
 
 
@@ -143,6 +162,30 @@ def _dict_to_port_specs(raw_ports: list[Any]) -> list[PortSpec]:
         )
         for item in raw_ports
     ]
+
+
+def _infer_case_node_inputs(pipeline_name: str, flat_inputs: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    if not flat_inputs:
+        return {}
+    pipeline_spec = PipelineCompiler().compile(create_pipeline(pipeline_name))
+    edge_targets: dict[str, set[str]] = {}
+    for edge in pipeline_spec.edges:
+        edge_targets.setdefault(edge.target_node, set()).add(edge.target_port)
+
+    inferred: dict[str, dict[str, Any]] = {}
+    for input_name, value in flat_inputs.items():
+        candidates: list[str] = []
+        for node in pipeline_spec.nodes:
+            op_inputs = {item.name for item in get_op_class(node.op_type).spec.inputs}
+            if input_name not in op_inputs:
+                continue
+            if input_name in edge_targets.get(node.name, set()):
+                continue
+            candidates.append(node.name)
+        if len(candidates) != 1:
+            continue
+        inferred.setdefault(candidates[0], {})[input_name] = value
+    return inferred
 
 
 def _load_pipeline_spec(ref: str) -> PipelineSpec:
@@ -164,18 +207,17 @@ def _load_pipeline_spec(ref: str) -> PipelineSpec:
     return PipelineCompiler().compile(pipeline)
 
 
-def _load_env_profile(ref: Any) -> EnvProfile:
-    if not ref or ref == "local_default":
-        return EnvProfile.local_default()
+def _load_env_profile(ref: Any, *, config_ref: Any = None) -> EnvProfile:
+    config_loader = FrameworkConfigLoader()
+    framework_config = config_loader.load(config_ref) if config_ref else config_loader.load_default()
+    if not ref or ref in {"local_default", "local"}:
+        return framework_config.resolve_env_profile(None)
     if isinstance(ref, dict):
         return EnvProfile.from_dict(ref)
-    return EnvProfileLoader().load(ref)
-
-
-def _latest_run_dir(output_root: Path, before: set[Path]) -> Path | None:
-    after = {path for path in output_root.iterdir() if path.is_dir()} if output_root.exists() else set()
-    created = sorted(after - before)
-    return created[-1] if created else None
+    candidate = Path(str(ref))
+    if candidate.exists():
+        return EnvProfileLoader().load(candidate)
+    return framework_config.resolve_env_profile(str(ref))
 
 
 def _load_failed_step_result(run_dir: Path) -> dict[str, Any] | None:
@@ -370,11 +412,26 @@ class SkillRunner:
         return _apply_pipeline_scaffold(payload, result)
 
     def _run_case_generator(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if "pipeline" in payload and "cases" in payload:
+            document = {
+                "pipeline": deepcopy(payload["pipeline"]),
+                "cases": deepcopy(payload["cases"]),
+            }
+            cases = TestCaseLoader().load_many_data(document, source="<generated>")
+            result = {
+                "yaml_case_draft": _render_yaml(document),
+                "case_specs": [item.to_dict() for item in cases],
+            }
+            if len(cases) == 1:
+                result["case_spec"] = cases[0].to_dict()
+            return result
+
         case_name = payload["case_name"]
+        target_pipeline = payload["target_pipeline"]
         case_spec = CaseSpec(
             case_id=_snake_case(case_name),
             name=case_name,
-            pipeline=payload["target_pipeline"],
+            pipeline=target_pipeline,
             inputs=payload.get("inputs", {}),
             expected=payload.get("expected", {}),
             tags=payload.get("tags", []),
@@ -386,14 +443,34 @@ class SkillRunner:
         )
         return {
             "case_spec": case_spec.to_dict(),
-            "yaml_case_draft": _render_yaml({"test_case": case_spec.to_dict()}),
+            "yaml_case_draft": _render_yaml(
+                {
+                    "pipeline": {
+                        "name": target_pipeline,
+                    },
+                    "cases": [
+                        {
+                            "case_id": case_spec.case_id,
+                            "name": case_spec.name,
+                            **_infer_case_node_inputs(target_pipeline, case_spec.inputs),
+                        }
+                    ],
+                }
+            ),
         }
 
     def _run_case_checker(self, payload: dict[str, Any]) -> dict[str, Any]:
-        case_spec = _load_case_from_payload(payload)
-        pipeline_ref = payload.get("pipeline_spec_ref") or case_spec.pipeline
-        report = CaseChecker().check(case_spec, _load_pipeline_spec(str(pipeline_ref)))
-        return report.to_dict()
+        reports: list[tuple[str, dict[str, Any]]] = []
+        pipeline_specs: dict[str, PipelineSpec] = {}
+        checker = CaseChecker()
+        for case_spec in _load_cases_from_payload(payload):
+            pipeline_ref = payload.get("pipeline_spec_ref") or case_spec.pipeline
+            pipeline_spec = pipeline_specs.get(str(pipeline_ref))
+            if pipeline_spec is None:
+                pipeline_spec = _load_pipeline_spec(str(pipeline_ref))
+                pipeline_specs[str(pipeline_ref)] = pipeline_spec
+            reports.append((case_spec.case_id, checker.check(case_spec, pipeline_spec).to_dict()))
+        return reports[0][1] if len(reports) == 1 else _aggregate_reports(reports)
 
     def _run_case_runner(self, payload: dict[str, Any]) -> dict[str, Any]:
         case_ref = payload["case_ref"]
@@ -401,48 +478,72 @@ class SkillRunner:
         debug = bool(payload.get("debug", False))
         execute = bool(payload.get("execute", False))
         env_profile_ref = payload.get("env_profile")
-        env_profile = _load_env_profile(env_profile_ref)
-        case = TestCaseLoader().load(case_ref)
-        pipeline = create_pipeline(payload.get("pipeline_ref") or case.pipeline)
-        pipeline_spec = PipelineCompiler().compile(pipeline)
+        framework_config_ref = payload.get("framework_config")
+        env_profile = _load_env_profile(env_profile_ref, config_ref=framework_config_ref)
+        selected_case_id = payload.get("case_id")
+        cases = TestCaseLoader().load_many(case_ref)
+        if selected_case_id is not None:
+            cases = [case for case in cases if case.case_id == selected_case_id]
+            if not cases:
+                raise ValueError(f"case_id not found in case file: {selected_case_id}")
         command = (
             f"testpipe run {case_ref}"
+            f"{'' if not selected_case_id else f' --case-id {selected_case_id}'}"
             f"{'' if output_root == Path('runs') else f' --output-root {output_root}'}"
+            f"{'' if not framework_config_ref else f' --config {framework_config_ref}'}"
             f"{'' if not env_profile_ref else f' --env-profile {env_profile_ref}'}"
             f"{' --debug' if debug else ''}"
         )
 
         result_location = None
+        result_locations = None
         summary = None
+        summaries = None
         execution_console_log = None
+        pipeline_specs: dict[str, PipelineSpec] = {}
         if execute:
             before = {path for path in output_root.iterdir() if path.is_dir()} if output_root.exists() else set()
             console_buffer = StringIO()
             with redirect_stdout(console_buffer):
-                summary_obj = TestEngine(output_root=output_root, debug=debug).execute(
-                    case_spec=case,
-                    pipeline_spec=pipeline_spec,
-                    env_profile=env_profile,
-                )
-            summary = summary_obj.to_dict()
+                engine = TestEngine(output_root=output_root, debug=debug)
+                summary_objs = []
+                for case in cases:
+                    pipeline_spec = pipeline_specs.get(case.pipeline)
+                    if pipeline_spec is None:
+                        pipeline_spec = PipelineCompiler().compile(create_pipeline(payload.get("pipeline_ref") or case.pipeline))
+                        pipeline_specs[case.pipeline] = pipeline_spec
+                    summary_objs.append(
+                        engine.execute(
+                            case_spec=case,
+                            pipeline_spec=pipeline_spec,
+                            env_profile=env_profile,
+                        )
+                    )
             execution_console_log = console_buffer.getvalue().strip() or None
-            run_dir = _latest_run_dir(output_root, before)
-            result_location = None if run_dir is None else str(run_dir)
+            created_runs = []
+            if output_root.exists():
+                created_runs = sorted(path for path in output_root.iterdir() if path.is_dir() and path not in before)
+            result_locations = [{"case_id": item.case_id, "run_dir": str(path)} for item, path in zip(cases, created_runs, strict=False)]
+            summaries = [item.to_dict() for item in summary_objs]
+            if len(summary_objs) == 1:
+                summary = summary_objs[0].to_dict()
+                result_location = None if not created_runs else str(created_runs[-1])
 
         return {
             "run_command": command,
             "run_plan_summary": {
-                "case_id": case.case_id,
-                "pipeline": pipeline_spec.name,
-                "total_steps": len(pipeline_spec.nodes),
-                "stages": list(dict.fromkeys(pipeline_spec.metadata.get("stages", []))),
+                "case_count": len(cases),
+                "case_ids": [case.case_id for case in cases],
+                "pipelines": sorted({case.pipeline for case in cases}),
                 "output_root": str(output_root),
                 "debug": debug,
                 "execute": execute,
                 "env_profile": env_profile.to_dict(),
             },
             "result_location": result_location,
+            "result_locations": result_locations,
             "summary": summary,
+            "summaries": summaries,
             "execution_console_log": execution_console_log,
         }
 

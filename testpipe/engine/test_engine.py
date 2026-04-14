@@ -63,7 +63,7 @@ class TestEngine:
                 collected_inputs = self._collect_inputs(pipeline_spec, node_spec.name, context)
                 display_inputs = self._filter_step_inputs(op_class, collected_inputs)
                 action_runner = ActionRunner(trace_recorder)
-                host_executor = HostExecutor(action_runner, None)  # type: ignore[arg-type]
+                host_executor = HostExecutor(action_runner, None, env_profile)  # type: ignore[arg-type]
                 device_executor = DeviceExecutor(action_runner, env_profile, None, run_dir)  # type: ignore[arg-type]
                 transfer_executor = TransferExecutor(action_runner, env_profile, None, run_dir)  # type: ignore[arg-type]
                 step_context = StepContext(
@@ -227,6 +227,7 @@ class TestEngine:
             for item in pipeline_spec.inputs
             if item.name in context.shared_data
         }
+        inputs.update(context.case_spec.inputs_by_node.get(node_name, {}))
         for edge in pipeline_spec.edges:
             if edge.target_node != node_name:
                 continue
@@ -389,11 +390,22 @@ class TestEngine:
             return {}
 
         checks: dict[str, object] = {}
-        for key in ("target_path", "actual_text", "expected_text", "actual_value", "expected_json", "json_data"):
+        for key in (
+            "target_path",
+            "actual_text",
+            "expected_text",
+            "actual_value",
+            "expected_value",
+            "operator",
+            "expected_json",
+            "json_data",
+        ):
             if key in step_inputs:
                 checks[key] = step_inputs[key]
         for key in ("expected_value", "operator", "expectations"):
             if key in node_spec.attrs:
+                if key in checks:
+                    continue
                 checks[key] = node_spec.attrs[key]
         if "test_passed" in outputs:
             checks["check_result"] = outputs["test_passed"]
@@ -405,6 +417,14 @@ class TestEngine:
         commands = [item for item in (self._render_event_command(event) for event in step_events) if item]
         if self.debug or op_type != "ResourceFetch":
             return commands
+
+        if any(getattr(event, "action_type", "") == "resource.archive_download" for event in step_events):
+            resource_ref = step_inputs.get("resource_ref")
+            if isinstance(resource_ref, dict):
+                repo = resource_ref.get("repo", "")
+                git_ref = resource_ref.get("ref", "HEAD")
+                subpath = resource_ref.get("subpath", "")
+                return [f"github archive fetch repo={repo} ref={git_ref} subpath={subpath}"]
 
         resource_ref = step_inputs.get("resource_ref")
         if isinstance(resource_ref, dict):
