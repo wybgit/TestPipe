@@ -27,8 +27,11 @@ class CaseChecker:
         required_input_names = {item.name for item in pipeline_spec.inputs if item.required}
         node_specs = pipeline_spec.node_map()
         edge_targets: dict[str, set[str]] = {}
-        for edge in pipeline_spec.edges:
-            edge_targets.setdefault(edge.target_node, set()).add(edge.target_port)
+        node_bindings: dict[str, dict[str, object]] = {}
+        for node in pipeline_spec.nodes:
+            for binding in node.input_bindings:
+                edge_targets.setdefault(node.name, set()).add(binding.target_port)
+                node_bindings.setdefault(node.name, {})[binding.target_port] = binding
 
         satisfied_pipeline_inputs = set(case_spec.inputs.keys())
         for node_name, node_inputs in case_spec.inputs_by_node.items():
@@ -72,7 +75,7 @@ class CaseChecker:
                 continue
 
             node_spec = node_specs[node_name]
-            op_class = get_op_class(node_spec.op_type)
+            op_class = get_op_class(node_spec.op_name)
             op_input_names = {item.name for item in op_class.spec.inputs}
             connected_ports = edge_targets.get(node_name, set())
             for port_name in sorted(node_inputs):
@@ -81,12 +84,15 @@ class CaseChecker:
                         IssueSpec(
                             level="error",
                             field=f"inputs_by_node.{node_name}.{port_name}",
-                            message=f"port is not declared by op '{node_spec.op_type}'",
+                            message=f"port is not declared by op '{node_spec.op_name}'",
                         )
                     )
                     fix_suggestions.append(f"检查节点 {node_name} 的输入端口名，删除或修正 {port_name}")
                     continue
                 if port_name in connected_ports:
+                    binding = node_bindings.get(node_name, {}).get(port_name)
+                    if binding is not None and getattr(binding, "source_type", "") == "pipeline_input":
+                        continue
                     issues.append(
                         IssueSpec(
                             level="error",

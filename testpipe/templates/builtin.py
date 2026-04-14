@@ -14,7 +14,6 @@ register_template(
         body={
             "task_type": "generate_test_op",
             "op_name": "",
-            "op_category": "",
             "business_goal": "",
             "inputs": [{"name": "", "type": "", "description": ""}],
             "outputs": [{"name": "", "type": "", "description": ""}],

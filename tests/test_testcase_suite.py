@@ -28,13 +28,16 @@ class TestCaseSuiteTest(unittest.TestCase):
         bootstrap()
         payload = {
             "pipeline": {
-                "name": "SmokePipeline",
+                "name": "OnnxGitAtcPipeline",
             },
             "cases": [
                 {
                     "case_id": "single_case",
-                    "echo": {
-                        "message": "hello single",
+                    "fetchModelNode": {
+                        "resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"},
+                    },
+                    "compileModelNode": {
+                        "soc_version": "Ascend310P3",
                     },
                 }
             ],
@@ -43,8 +46,9 @@ class TestCaseSuiteTest(unittest.TestCase):
         case = TestCaseLoader().load_data(payload)
         self.assertEqual(case.name, "")
         self.assertEqual(case.variables, {})
-        self.assertEqual(case.inputs["message"], "hello single")
-        self.assertEqual(case.inputs_by_node["echo"]["message"], "hello single")
+        self.assertEqual(case.inputs["resource_ref"], {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"})
+        self.assertEqual(case.inputs["soc_version"], "Ascend310P3")
+        self.assertEqual(case.inputs_by_node["fetchModelNode"]["resource_ref"]["repo"], "repo_a")
         self.assertEqual(case.expected, {})
 
     def test_suite_loads_globals_and_case_overrides(self) -> None:
@@ -55,33 +59,44 @@ class TestCaseSuiteTest(unittest.TestCase):
                 "suite.yaml",
                 {
                     "pipeline": {
-                        "name": "SmokePipeline",
-                        "echo": {"message": "hello suite"},
+                        "name": "OnnxGitAtcPipeline",
+                        "fetchModelNode": {
+                            "resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"},
+                        },
+                        "compileModelNode": {"soc_version": "Ascend310P3"},
                     },
                     "cases": [
                         {"case_id": "smoke_suite_default"},
-                        {"case_id": "smoke_suite_override", "echo": {"message": "hello suite override"}},
+                        {
+                            "case_id": "smoke_suite_override",
+                            "fetchModelNode": {
+                                "resource_ref": {"kind": "git_dir", "repo": "repo_b", "subpath": "model_b"},
+                            },
+                        },
                     ],
                 },
             )
             cases = TestCaseLoader().load_many(case_file)
         self.assertEqual([case.case_id for case in cases], ["smoke_suite_default", "smoke_suite_override"])
-        self.assertEqual(cases[0].inputs["message"], "hello suite")
-        self.assertEqual(cases[1].inputs["message"], "hello suite override")
+        self.assertEqual(cases[0].inputs["resource_ref"]["repo"], "repo_a")
+        self.assertEqual(cases[1].inputs["resource_ref"]["repo"], "repo_b")
+        self.assertEqual(cases[0].inputs["soc_version"], "Ascend310P3")
         self.assertEqual(cases[0].expected, {})
         self.assertEqual(cases[1].expected, {})
 
     def test_checker_rejects_invalid_or_overwritten_node_inputs(self) -> None:
         bootstrap()
-        pipeline_spec = PipelineCompiler().compile(create_pipeline("SmokePipeline"))
+        pipeline_spec = PipelineCompiler().compile(create_pipeline("OnnxGitAtcPipeline"))
         payload = {
             "pipeline": {
-                "name": "SmokePipeline",
+                "name": "OnnxGitAtcPipeline",
             },
             "cases": [
                 {
                     "case_id": "bad_node_mapping",
-                    "echo": {"env_ready": False},
+                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"}},
+                    "compileModelNode": {"soc_version": "Ascend310P3"},
+                    "checkOmExistsNode": {"target_path": "/tmp/override.om"},
                     "missing_node": {"message": "hello"},
                 }
             ],
@@ -91,16 +106,24 @@ class TestCaseSuiteTest(unittest.TestCase):
         report = CaseChecker().check(case, pipeline_spec)
         self.assertEqual(report.status, "fail")
         issue_fields = {issue.field for issue in report.issues}
-        self.assertIn("inputs_by_node.echo.env_ready", issue_fields)
+        self.assertIn("inputs_by_node.checkOmExistsNode.target_path", issue_fields)
         self.assertIn("inputs_by_node.missing_node", issue_fields)
 
     def test_loader_rejects_duplicate_case_ids(self) -> None:
         bootstrap()
         payload = {
-            "pipeline": {"name": "SmokePipeline"},
+            "pipeline": {"name": "OnnxGitAtcPipeline"},
             "cases": [
-                {"case_id": "dup_case", "echo": {"message": "hello"}},
-                {"case_id": "dup_case", "echo": {"message": "world"}},
+                {
+                    "case_id": "dup_case",
+                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"}},
+                    "compileModelNode": {"soc_version": "Ascend310P3"},
+                },
+                {
+                    "case_id": "dup_case",
+                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_b", "subpath": "model_b"}},
+                    "compileModelNode": {"soc_version": "Ascend310P3"},
+                },
             ],
         }
         with self.assertRaisesRegex(ValueError, "duplicate case_id"):
@@ -110,11 +133,19 @@ class TestCaseSuiteTest(unittest.TestCase):
         bootstrap()
         suite = {
             "pipeline": {
-                "name": "SmokePipeline",
+                "name": "OnnxGitAtcPipeline",
             },
             "cases": [
-                {"case_id": "case_a", "echo": {"message": "hello"}},
-                {"case_id": "case_b", "echo": {"message": "world"}},
+                {
+                    "case_id": "case_a",
+                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"}},
+                    "compileModelNode": {"soc_version": "Ascend310P3"},
+                },
+                {
+                    "case_id": "case_b",
+                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_b", "subpath": "model_b"}},
+                    "compileModelNode": {"soc_version": "Ascend310P3"},
+                },
             ],
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -143,33 +174,32 @@ class TestCaseSuiteTest(unittest.TestCase):
                 Path(tmp_dir),
                 "suite.yaml",
                 {
-                    "pipeline": {"name": "SmokePipeline"},
+                    "pipeline": {"name": "OnnxGitAtcPipeline"},
                     "cases": [
                         {
                             "case_id": "smoke_suite_default",
                             "description": "default suite case",
                             "level": "P1",
-                            "echo": {"message": "hello suite"},
+                            "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"}},
+                            "compileModelNode": {"soc_version": "Ascend310P3"},
                         },
                         {
                             "case_id": "smoke_suite_override",
                             "description": "override suite case",
                             "level": "P0",
-                            "echo": {"message": "hello suite override"},
+                            "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_b", "subpath": "model_b"}},
+                            "compileModelNode": {"soc_version": "Ascend310P3"},
                         },
                     ],
                 },
             )
-            exit_code = main(["run", str(case_file), "--output-root", tmp_dir])
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(["check-case", str(case_file), "--json"])
             self.assertEqual(exit_code, 0)
-            run_dirs = sorted(path for path in Path(tmp_dir).iterdir() if path.is_dir())
-            self.assertEqual(len([path for path in run_dirs if (path / "summary.json").exists()]), 2)
-            summary_files = [path / "summary.json" for path in run_dirs if (path / "summary.json").exists()]
-            self.assertTrue(all(path.exists() for path in summary_files))
-            summary_payloads = [json.loads(path.read_text(encoding="utf-8")) for path in summary_files]
-            self.assertTrue(all("description" in item for item in summary_payloads))
-            self.assertTrue(all("level" in item for item in summary_payloads))
-            self.assertTrue(all("case_name" not in item for item in summary_payloads))
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["case_count"], 2)
+            self.assertEqual(payload["status"], "pass")
 
 
 if __name__ == "__main__":

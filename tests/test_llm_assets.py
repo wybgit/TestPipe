@@ -72,17 +72,23 @@ class LLMAssetRegistryTest(unittest.TestCase):
         bootstrap()
         case = TestCaseLoader().load_data(
             {
-                "pipeline": {"name": "SmokePipeline"},
-                "cases": [{"case_id": "smoke_case", "echo": {"message": "hello"}}],
+                "pipeline": {"name": "OnnxGitAtcPipeline"},
+                "cases": [
+                    {
+                        "case_id": "onnx_case",
+                        "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo", "subpath": "model"}},
+                        "compileModelNode": {"soc_version": "Ascend310P3"},
+                    }
+                ],
             }
         )
-        case.inputs.pop("message")
-        case.inputs_by_node["echo"].pop("message")
+        case.inputs.pop("resource_ref")
+        case.inputs_by_node["fetchModelNode"].pop("resource_ref")
         pipeline_spec = PipelineCompiler().compile(create_pipeline(case.pipeline))
 
         report = CaseChecker().check(case, pipeline_spec)
         self.assertEqual(report.status, "fail")
-        self.assertEqual(report.issues[0].field, "inputs.message")
+        self.assertEqual(report.issues[0].field, "inputs.resource_ref")
 
     def test_check_case_cli_returns_structured_failure(self) -> None:
         bootstrap()
@@ -90,7 +96,7 @@ class LLMAssetRegistryTest(unittest.TestCase):
             "test_case": {
                 "case_id": "bad_case",
                 "name": "BadCase",
-                "pipeline": "SmokePipeline",
+                "pipeline": "OnnxGitAtcPipeline",
                 "inputs": {},
                 "expected": {"unknown_output": True},
             }
@@ -105,7 +111,7 @@ class LLMAssetRegistryTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 2)
         self.assertIn('"status": "fail"', stdout.getvalue())
-        self.assertIn('"field": "inputs.message"', stdout.getvalue())
+        self.assertIn('"field": "inputs.resource_ref"', stdout.getvalue())
 
 
 if __name__ == "__main__":

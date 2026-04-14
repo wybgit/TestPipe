@@ -10,7 +10,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from testpipe.core import StepExecutionError, get_op_class
+from testpipe.core import StepExecutionError, get_op_class, is_assert_op_class
 from testpipe.engine.context import ExecutionContext, MappingView, StepContext
 from testpipe.engine.planner import ExecutionPlanner
 from testpipe.engine.result import ResultSummary, evaluate_expected
@@ -53,14 +53,14 @@ class TestEngine:
         try:
             for step in plan:
                 node_spec = pipeline_spec.node_map()[step.node_name]
-                op_class = get_op_class(node_spec.op_type)
+                op_class = get_op_class(node_spec.op_name)
                 op = op_class(**node_spec.attrs)
                 step_dir = run_dir / "steps" / f"{step.index:02d}_{step.node_name}"
                 step_dir.mkdir(parents=True, exist_ok=True)
                 stdout_log = step_dir / "stdout.log"
                 stderr_log = step_dir / "stderr.log"
 
-                collected_inputs = self._collect_inputs(pipeline_spec, node_spec.name, context)
+                collected_inputs = self._collect_inputs(pipeline_spec, node_spec, op_class, context)
                 display_inputs = self._filter_step_inputs(op_class, collected_inputs)
                 action_runner = ActionRunner(trace_recorder)
                 host_executor = HostExecutor(action_runner, None, env_profile)  # type: ignore[arg-type]
@@ -112,7 +112,7 @@ class TestEngine:
                         self._append_step_error(stderr_log, f"[teardown] {teardown_exc}")
                     duration_ms = int((perf_counter() - step_started) * 1000)
                     rendered_outputs = self._select_visible_outputs(outputs, visible_outputs)
-                    node_type = self._node_type_label(op_class)
+                    node_type = self._node_type_label(node_spec, op_class, display_inputs, step_events)
                     checks = self._build_checks(node_spec, op_class, display_inputs, rendered_outputs)
                     step_result = self._build_step_result(
                         step=step,
@@ -139,7 +139,7 @@ class TestEngine:
                 if step_error is not None:
                     break
         finally:
-            outputs = {item.name: context.shared_data.get(item.name) for item in pipeline_spec.outputs}
+            outputs = self._collect_pipeline_outputs(pipeline_spec, context)
             issues = evaluate_expected(case_spec.expected, outputs)
             if step_error is not None:
                 issues.append(str(step_error))
@@ -191,14 +191,14 @@ class TestEngine:
             "step_index": step.index,
             "total_steps": total_steps,
             "step_name": node_spec.name,
-            "op_type": node_spec.op_type,
+            "op_name": node_spec.op_name,
             "node_type": node_type,
             "status": status,
             "duration_ms": duration_ms,
             "inputs": step_inputs,
             "params": dict(node_spec.attrs),
-            "commands": self._build_step_commands(node_spec.op_type, step_inputs, step_events),
-            "execution_logs": self._build_execution_logs(node_spec.op_type, step_events),
+            "commands": self._build_step_commands(node_spec.op_name, step_inputs, step_events),
+            "execution_logs": self._build_execution_logs(node_spec.op_name, step_events),
             "outputs": outputs,
             "checks": checks,
             "error": failure_message,
@@ -213,7 +213,7 @@ class TestEngine:
         header = (
             f"[{marker}][{step_result['node_type']}] "
             f"{step_result['step_index']}/{step_result['total_steps']} "
-            f"{step_result['step_name']} ({step_result['op_type']}) | {step_result['duration_ms']}ms"
+            f"{step_result['step_name']} ({step_result['op_name']}) | {step_result['duration_ms']}ms"
         )
         self._emit_block(
             execution_log_path,
@@ -222,19 +222,34 @@ class TestEngine:
             kind="step_pass" if step_result["status"] == "passed" else "step_fail",
         )
 
-    def _collect_inputs(self, pipeline_spec, node_name: str, context: ExecutionContext) -> dict[str, object]:
-        inputs = {
-            item.name: context.shared_data[item.name]
-            for item in pipeline_spec.inputs
-            if item.name in context.shared_data
-        }
-        inputs.update(context.case_spec.inputs_by_node.get(node_name, {}))
-        for edge in pipeline_spec.edges:
-            if edge.target_node != node_name:
+    def _collect_inputs(self, pipeline_spec, node_spec, op_class, context: ExecutionContext) -> dict[str, object]:
+        inputs: dict[str, object] = {}
+        bound_ports: set[str] = set()
+        declared_ports = {item.name for item in op_class.spec.inputs}
+
+        for binding in node_spec.input_bindings:
+            if binding.target_port not in declared_ports:
                 continue
-            source_outputs = context.node_outputs.get(edge.source_node, {})
-            if edge.source_port in source_outputs:
-                inputs[edge.target_port] = source_outputs[edge.source_port]
+            bound_ports.add(binding.target_port)
+            if binding.source_type == "pipeline_input":
+                if binding.source_name in context.shared_data:
+                    inputs[binding.target_port] = context.shared_data[binding.source_name]
+                continue
+            if binding.source_type == "node_output":
+                source_outputs = context.node_outputs.get(binding.source_name, {})
+                if binding.source_port in source_outputs:
+                    inputs[binding.target_port] = source_outputs[binding.source_port]
+                continue
+
+        for key, value in context.case_spec.inputs_by_node.get(node_spec.name, {}).items():
+            if key not in bound_ports:
+                inputs[key] = value
+
+        for item in pipeline_spec.inputs:
+            if item.name in bound_ports or item.name in inputs:
+                continue
+            if item.name in declared_ports and item.name in context.shared_data:
+                inputs[item.name] = context.shared_data[item.name]
         return inputs
 
     def _filter_step_inputs(self, op_class, inputs: dict[str, object]) -> dict[str, object]:
@@ -263,7 +278,7 @@ class TestEngine:
             header=(
                 f"[{marker}][{step_result['node_type']}] "
                 f"{step_result['step_index']}/{step_result['total_steps']} "
-                f"{step_result['step_name']} ({step_result['op_type']}) | {step_result['duration_ms']}ms"
+                f"{step_result['step_name']} ({step_result['op_name']}) | {step_result['duration_ms']}ms"
             ),
             body_lines=body_lines,
         )
@@ -365,11 +380,10 @@ class TestEngine:
             return "OUTPUT"
         return None
 
-    def _node_type_label(self, op_class) -> str:
-        category = getattr(op_class.spec, "category", "")
-        if category == "assert":
+    def _node_type_label(self, node_spec, op_class, step_inputs: dict[str, object], step_events) -> str:
+        if is_assert_op_class(op_class):
             return "OUTPUT"
-        if category in {"resource", "compile", "host", "device", "transfer", "utility"}:
+        if step_inputs or node_spec.attrs or step_events or node_spec.input_bindings:
             return "EXEC"
         return "INPUT"
 
@@ -387,8 +401,7 @@ class TestEngine:
         return body_lines
 
     def _build_checks(self, node_spec, op_class, step_inputs: dict[str, object], outputs: dict[str, object]) -> dict[str, object]:
-        category = getattr(op_class.spec, "category", "")
-        if category != "assert":
+        if not is_assert_op_class(op_class):
             return {}
 
         checks: dict[str, object] = {}
@@ -415,9 +428,9 @@ class TestEngine:
             checks["check_result"] = outputs["path_exists"]
         return checks
 
-    def _build_step_commands(self, op_type: str, step_inputs: dict[str, object], step_events) -> list[str]:
+    def _build_step_commands(self, op_name: str, step_inputs: dict[str, object], step_events) -> list[str]:
         commands = [item for item in (self._render_event_command(event) for event in step_events) if item]
-        if self.debug or op_type != "ResourceFetch":
+        if self.debug or op_name != "ResourceFetch":
             return commands
 
         if any(getattr(event, "action_type", "") == "resource.archive_download" for event in step_events):
@@ -442,8 +455,8 @@ class TestEngine:
             return [f"fetch local resource path={resource_path}"]
         return commands
 
-    def _build_execution_logs(self, op_type: str, step_events) -> dict[str, str]:
-        if not self.debug and op_type == "ResourceFetch":
+    def _build_execution_logs(self, op_name: str, step_events) -> dict[str, str]:
+        if not self.debug and op_name == "ResourceFetch":
             if not step_events:
                 return {}
             last_event = step_events[-1]
@@ -517,6 +530,21 @@ class TestEngine:
 
     def _select_visible_outputs(self, outputs: dict[str, Any], visible_output_names: set[str]) -> dict[str, Any]:
         return {key: value for key, value in outputs.items() if key in visible_output_names}
+
+    def _collect_pipeline_outputs(self, pipeline_spec, context: ExecutionContext) -> dict[str, object]:
+        outputs: dict[str, object] = {}
+        binding_map = pipeline_spec.output_binding_map()
+        for item in pipeline_spec.outputs:
+            binding = binding_map.get(item.name)
+            if binding is None:
+                outputs[item.name] = context.shared_data.get(item.name)
+                continue
+            if binding.source_type == "pipeline_input":
+                outputs[item.name] = context.shared_data.get(binding.source_name)
+                continue
+            source_outputs = context.node_outputs.get(binding.source_name, {})
+            outputs[item.name] = source_outputs.get(binding.source_port)
+        return outputs
 
     def _indent_wrapped(self, text: str, *, prefix: str, width: int = 100) -> list[str]:
         wrapped = textwrap.wrap(text, width=width, break_long_words=False, break_on_hyphens=False)

@@ -16,7 +16,16 @@ from testpipe.core import PipelineCompiler, create_pipeline, get_op_class
 from testpipe.engine import TestEngine
 from testpipe.loaders import EnvProfileLoader, FrameworkConfigLoader, StructuredLoader, TestCaseLoader
 from testpipe.skills.registry import get_skill
-from testpipe.spec import CaseSpec, EnvProfile, PipelineSpec, PortSpec
+from testpipe.spec import (
+    CaseSpec,
+    EdgeSpec,
+    EnvProfile,
+    InputBindingSpec,
+    NodeSpec,
+    OutputBindingSpec,
+    PipelineSpec,
+    PortSpec,
+)
 from testpipe.validation import CaseChecker
 
 
@@ -84,7 +93,7 @@ def _apply_test_op_scaffold(payload: dict[str, Any], result: dict[str, Any]) -> 
     scaffold = _scaffold_config(payload)
     if scaffold is None:
         return result
-    module_name = _snake_case(result["op_spec"]["op_type"])
+    module_name = _snake_case(result["op_spec"]["op_name"])
     root_dir = Path(str(scaffold["root_dir"]))
     op_dir = root_dir / str(scaffold.get("ops_dir", "ops"))
     tests_dir = root_dir / str(scaffold.get("tests_dir", "tests"))
@@ -169,14 +178,15 @@ def _infer_case_node_inputs(pipeline_name: str, flat_inputs: dict[str, Any]) -> 
         return {}
     pipeline_spec = PipelineCompiler().compile(create_pipeline(pipeline_name))
     edge_targets: dict[str, set[str]] = {}
-    for edge in pipeline_spec.edges:
-        edge_targets.setdefault(edge.target_node, set()).add(edge.target_port)
+    for node in pipeline_spec.nodes:
+        for binding in node.input_bindings:
+            edge_targets.setdefault(node.name, set()).add(binding.target_port)
 
     inferred: dict[str, dict[str, Any]] = {}
     for input_name, value in flat_inputs.items():
         candidates: list[str] = []
         for node in pipeline_spec.nodes:
-            op_inputs = {item.name for item in get_op_class(node.op_type).spec.inputs}
+            op_inputs = {item.name for item in get_op_class(node.op_name).spec.inputs}
             if input_name not in op_inputs:
                 continue
             if input_name in edge_targets.get(node.name, set()):
@@ -199,8 +209,19 @@ def _load_pipeline_spec(ref: str) -> PipelineSpec:
             description=raw.get("description", ""),
             inputs=_dict_to_port_specs(raw.get("inputs", [])),
             outputs=_dict_to_port_specs(raw.get("outputs", [])),
-            nodes=[],
-            edges=[],
+            nodes=[
+                NodeSpec(
+                    name=item["name"],
+                    op_name=item.get("op_name", item.get("op_type", "")),
+                    op_version=item.get("op_version"),
+                    stage=item.get("stage"),
+                    attrs=item.get("attrs", {}),
+                    input_bindings=[InputBindingSpec(**binding) for binding in item.get("input_bindings", [])],
+                )
+                for item in raw.get("nodes", [])
+            ],
+            edges=[EdgeSpec(**item) for item in raw.get("edges", [])],
+            output_bindings=[OutputBindingSpec(**item) for item in raw.get("output_bindings", [])],
             metadata=raw.get("metadata", {}),
         )
     pipeline = create_pipeline(ref)
@@ -258,9 +279,8 @@ class SkillRunner:
         outputs = _normalize_ports(payload.get("outputs", []), default_type="string")
         attributes = payload.get("attributes", [])
         op_spec = {
-            "op_type": op_name,
+            "op_name": op_name,
             "version": "1.0",
-            "category": payload.get("op_category", "custom"),
             "description": payload.get("business_goal", ""),
             "inputs": inputs,
             "outputs": outputs,
@@ -273,9 +293,7 @@ class SkillRunner:
                 '    """Generated from test-op template."""',
                 "",
                 "    spec = OpSpec(",
-                f"        op_type={op_name!r},",
                 '        version="1.0",',
-                f"        category={payload.get('op_category', 'custom')!r},",
                 f"        description={payload.get('business_goal', '')!r},",
                 "        inputs=[",
                 *[
@@ -336,7 +354,7 @@ class SkillRunner:
             nodes.append(
                 {
                     "name": f"{index:02d}_{_snake_case(op_name)}",
-                    "op_type": op_name,
+                    "op_name": op_name,
                     "stage": stage_name,
                     "attrs": {},
                 }
@@ -347,11 +365,11 @@ class SkillRunner:
             for stage_name in stage_names:
                 mermaid_lines.append(f"  subgraph {stage_name}[{stage_name}]")
                 for node in [item for item in nodes if item["stage"] == stage_name]:
-                    mermaid_lines.append(f"    {node['name']}[{node['op_type']}]")
+                    mermaid_lines.append(f"    {node['name']}[{node['op_name']}]")
                 mermaid_lines.append("  end")
         else:
             for node in nodes:
-                mermaid_lines.append(f"  {node['name']}[{node['op_type']}]")
+                mermaid_lines.append(f"  {node['name']}[{node['op_name']}]")
         for source, target in zip(nodes, nodes[1:]):
             mermaid_lines.append(f"  {source['name']} --> {target['name']}")
 
@@ -360,26 +378,54 @@ class SkillRunner:
             f"class {_class_case(payload['pipeline_name'])}(Pipeline):",
             "    def define(self) -> None:",
         ]
+        input_refs: list[tuple[dict[str, Any], str]] = []
         if pipeline_inputs:
-            rendered_inputs = ", ".join(
-                f"PortSpec(name={item['name']!r}, type={item.get('type', 'string')!r}, description={item.get('description', '')!r})"
-                for item in pipeline_inputs
-            )
-            dsl_lines.append(f"        self.set_inputs({rendered_inputs})")
-        if pipeline_outputs:
-            rendered_outputs = ", ".join(
-                f"PortSpec(name={item['name']!r}, type={item.get('type', 'string')!r}, description={item.get('description', '')!r})"
-                for item in pipeline_outputs
-            )
-            dsl_lines.append(f"        self.set_outputs({rendered_outputs})")
+            for item in pipeline_inputs:
+                ref_name = _snake_case(item["name"])
+                input_refs.append((item, ref_name))
+                dsl_lines.append(
+                    f"        {ref_name} = self.add_input({item['name']!r}, {item.get('type', 'string')!r}, description={item.get('description', '')!r})"
+                )
+
+        node_refs: list[tuple[dict[str, Any], str]] = []
         if stage_names:
             for stage_name in stage_names:
                 dsl_lines.append(f"        self.set_stage({stage_name!r})")
                 for node in [item for item in nodes if item["stage"] == stage_name]:
-                    dsl_lines.append(f"        self.add_step({node['name']!r}, {_class_case(node['op_type'])}Op())")
+                    node_ref = _snake_case(node["name"])
+                    node_refs.append((node, node_ref))
+                    if not node_refs[:-1] and input_refs:
+                        dsl_lines.append(
+                            f"        {node_ref} = self.add_node({node['name']!r}, {_class_case(node['op_name'])}Op(), inputs={{'input': {input_refs[0][1]}}})"
+                        )
+                    elif len(node_refs) > 1:
+                        previous_ref = node_refs[-2][1]
+                        dsl_lines.append(
+                            f"        {node_ref} = self.add_node({node['name']!r}, {_class_case(node['op_name'])}Op(), inputs={{'input': {previous_ref}.output('result')}})"
+                        )
+                    else:
+                        dsl_lines.append(f"        {node_ref} = self.add_node({node['name']!r}, {_class_case(node['op_name'])}Op())")
         else:
             for node in nodes:
-                dsl_lines.append(f"        self.add_step({node['name']!r}, {_class_case(node['op_type'])}Op())")
+                node_ref = _snake_case(node["name"])
+                node_refs.append((node, node_ref))
+                if not node_refs[:-1] and input_refs:
+                    dsl_lines.append(
+                        f"        {node_ref} = self.add_node({node['name']!r}, {_class_case(node['op_name'])}Op(), inputs={{'input': {input_refs[0][1]}}})"
+                    )
+                elif len(node_refs) > 1:
+                    previous_ref = node_refs[-2][1]
+                    dsl_lines.append(
+                        f"        {node_ref} = self.add_node({node['name']!r}, {_class_case(node['op_name'])}Op(), inputs={{'input': {previous_ref}.output('result')}})"
+                    )
+                else:
+                    dsl_lines.append(f"        {node_ref} = self.add_node({node['name']!r}, {_class_case(node['op_name'])}Op())")
+        if pipeline_outputs and node_refs:
+            last_ref = node_refs[-1][1]
+            for item in pipeline_outputs:
+                dsl_lines.append(
+                    f"        self.add_output({item['name']!r}, {last_ref}.output('result'), type={item.get('type', 'string')!r}, description={item.get('description', '')!r})"
+                )
 
         pipeline_spec = {
             "name": payload["pipeline_name"],
@@ -388,6 +434,17 @@ class SkillRunner:
             "inputs": pipeline_inputs,
             "outputs": pipeline_outputs,
             "nodes": nodes,
+            "output_bindings": [
+                {
+                    "output_name": item["name"],
+                    "source_type": "node_output",
+                    "source_name": nodes[-1]["name"],
+                    "source_port": "result",
+                }
+                for item in pipeline_outputs
+            ]
+            if nodes
+            else [],
             "edges": [
                 {
                     "source_node": source["name"],

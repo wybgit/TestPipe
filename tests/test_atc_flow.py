@@ -12,7 +12,8 @@ from testpipe.core import PipelineCompiler, create_pipeline
 from testpipe.engine import TestEngine
 from testpipe.engine.context import MappingView, StepContext
 from testpipe.infra import ActionRunner, ArtifactStore, HostExecutor, TraceRecorder
-from testpipe.ops.builtin import ATCCompileOp, ResourceFetchOp
+from testpipe.ops.atc import ATCCompileOp
+from testpipe.ops.resource import ResourceFetchOp
 from testpipe.spec import CaseSpec, EnvProfile
 
 

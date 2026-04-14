@@ -35,9 +35,7 @@ class AttrSpec:
 
 @dataclass(slots=True)
 class OpSpec:
-    op_type: str
     version: str
-    category: str
     description: str = ""
     inputs: list[PortSpec] = field(default_factory=list)
     outputs: list[PortSpec] = field(default_factory=list)
@@ -48,9 +46,7 @@ class OpSpec:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "op_type": self.op_type,
             "version": self.version,
-            "category": self.category,
             "description": self.description,
             "inputs": [item.to_dict() for item in self.inputs],
             "outputs": [item.to_dict() for item in self.outputs],
@@ -61,10 +57,29 @@ class OpSpec:
 @dataclass(slots=True)
 class NodeSpec:
     name: str
-    op_type: str
+    op_name: str
     op_version: str | None = None
     stage: str | None = None
     attrs: dict[str, Any] = field(default_factory=dict)
+    input_bindings: list["InputBindingSpec"] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "op_name": self.op_name,
+            "op_version": self.op_version,
+            "stage": self.stage,
+            "attrs": self.attrs,
+            "input_bindings": [item.to_dict() for item in self.input_bindings],
+        }
+
+
+@dataclass(slots=True)
+class InputBindingSpec:
+    target_port: str
+    source_type: str
+    source_name: str
+    source_port: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -90,10 +105,14 @@ class PipelineSpec:
     outputs: list[PortSpec] = field(default_factory=list)
     nodes: list[NodeSpec] = field(default_factory=list)
     edges: list[EdgeSpec] = field(default_factory=list)
+    output_bindings: list["OutputBindingSpec"] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def node_map(self) -> dict[str, NodeSpec]:
         return {node.name: node for node in self.nodes}
+
+    def output_binding_map(self) -> dict[str, "OutputBindingSpec"]:
+        return {binding.output_name: binding for binding in self.output_bindings}
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -104,8 +123,20 @@ class PipelineSpec:
             "outputs": [item.to_dict() for item in self.outputs],
             "nodes": [item.to_dict() for item in self.nodes],
             "edges": [item.to_dict() for item in self.edges],
+            "output_bindings": [item.to_dict() for item in self.output_bindings],
             "metadata": self.metadata,
         }
+
+
+@dataclass(slots=True)
+class OutputBindingSpec:
+    output_name: str
+    source_type: str
+    source_name: str
+    source_port: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(slots=True)

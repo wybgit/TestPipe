@@ -11,7 +11,7 @@ from testpipe.core.exceptions import ValidationError
 class ExecutionStep:
     index: int
     node_name: str
-    op_type: str
+    op_name: str
     depends_on: list[str]
 
 
@@ -48,7 +48,7 @@ class ExecutionPlanner:
             ExecutionStep(
                 index=index,
                 node_name=name,
-                op_type=node_map[name].op_type,
+                op_name=node_map[name].op_name,
                 depends_on=sorted(
                     edge.source_node for edge in pipeline_spec.edges if edge.target_node == name
                 ),
