@@ -300,6 +300,11 @@ class AtcMainlineFlowTest(unittest.TestCase):
             self.assertIn("Ascend310P3", dot_text)
             self.assertIn("Abs_testcase_5a6b43", dot_text)
             self.assertIn("path_exists", dot_text)
+            self.assertIn("INPUTS", dot_text)
+            self.assertIn("PARAMS", dot_text)
+            self.assertIn("COMMANDS", dot_text)
+            self.assertIn("git -C", dot_text)
+            self.assertIn("bash -lc", dot_text)
 
 
 if __name__ == "__main__":

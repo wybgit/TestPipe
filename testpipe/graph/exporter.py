@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import shutil
 import subprocess
 from pathlib import Path
@@ -9,8 +10,10 @@ from typing import Any
 
 from testpipe.core import get_op_class
 
-_NODE_WIDTH = 3.4
-_LABEL_WRAP_WIDTH = 34
+_NODE_WIDTH = 3.8
+_LABEL_WRAP_WIDTH = 44
+_MAX_INLINE_TEXT = 96
+_MAX_PATH_TEXT = 52
 
 
 def export_pipeline_graph(
@@ -21,6 +24,7 @@ def export_pipeline_graph(
     basename: str = "pipeline_graph",
     node_outputs: dict[str, dict[str, Any]] | None = None,
     pipeline_outputs: dict[str, Any] | None = None,
+    node_commands: dict[str, list[str]] | None = None,
     render_pdf: bool = True,
 ) -> dict[str, str | None]:
     """Export a pipeline graph to DOT and, by default, render a PDF."""
@@ -35,6 +39,7 @@ def export_pipeline_graph(
         case_spec,
         node_outputs=node_outputs or {},
         pipeline_outputs=pipeline_outputs or {},
+        node_commands=node_commands or {},
     )
     dot_path.write_text(dot_text, encoding="utf-8")
 
@@ -54,9 +59,19 @@ def export_pipeline_graph(
     }
 
 
-def _build_dot(pipeline_spec, case_spec, *, node_outputs: dict[str, dict[str, Any]], pipeline_outputs: dict[str, Any]) -> str:
+def _build_dot(
+    pipeline_spec,
+    case_spec,
+    *,
+    node_outputs: dict[str, dict[str, Any]],
+    pipeline_outputs: dict[str, Any],
+    node_commands: dict[str, list[str]],
+) -> str:
     pipeline_input_values = _pipeline_input_values(pipeline_spec, case_spec)
     direct_node_inputs = _direct_node_inputs(pipeline_spec, case_spec)
+    resolved_inputs = _resolve_node_inputs(pipeline_spec, case_spec, node_outputs, pipeline_input_values)
+    resolved_attrs = _resolve_node_attrs(pipeline_spec, case_spec)
+
     lines = [
         "digraph TestPipePipeline {",
         '  graph [',
@@ -69,17 +84,24 @@ def _build_dot(pipeline_spec, case_spec, *, node_outputs: dict[str, dict[str, An
         '    labelloc="t",',
         '    labeljust="l",',
         f'    label="{_graph_label(case_spec, pipeline_spec)}"',
-      "  ];",
-        f'  node [shape=box, style="filled", fontname="Helvetica", fontsize=11, margin="0.18,0.12", width={_NODE_WIDTH}, color="#94A3B8", penwidth=1.0];',
+        "  ];",
+        '  node [shape=plain, fontname="Helvetica", fontsize=11, margin=0];',
         '  edge [color="#64748B", penwidth=1.0, arrowsize=0.7];',
         "",
     ]
 
-    resolved_inputs = _resolve_node_inputs(pipeline_spec, case_spec, node_outputs, pipeline_input_values)
     lines.extend(_render_input_nodes(pipeline_spec, pipeline_input_values, direct_node_inputs))
     lines.append("")
 
-    lines.extend(_render_op_nodes(pipeline_spec, resolved_inputs, node_outputs))
+    lines.extend(
+        _render_op_nodes(
+            pipeline_spec,
+            resolved_inputs=resolved_inputs,
+            resolved_attrs=resolved_attrs,
+            node_outputs=node_outputs,
+            node_commands=node_commands,
+        )
+    )
     lines.append("")
 
     lines.extend(_render_output_nodes(pipeline_spec, pipeline_outputs))
@@ -104,21 +126,26 @@ def _render_input_nodes(
         if value is _MISSING and not item.required:
             continue
         node_id = _input_node_id(item.name)
-        lines.append(f"  {node_id} [{_node_attrs(_input_label(item.name, value), fill='#EAF4FF', color='#93C5FD')}] ;")
+        lines.append(
+            f"  {node_id} [{_html_node_attrs(_input_label(item.name, value), color='#93C5FD')}] ;"
+        )
     for node in pipeline_spec.nodes:
         extra_inputs = direct_node_inputs.get(node.name, {})
         if not extra_inputs:
             continue
         lines.append(
-            f"  {_param_input_node_id(node.name)} [{_node_attrs(_node_param_input_label(node.name, extra_inputs), fill='#EFF6FF', color='#BFDBFE')}] ;"
+            f"  {_param_input_node_id(node.name)} [{_html_node_attrs(_node_param_input_label(node.name, extra_inputs), color='#BFDBFE')}] ;"
         )
     return lines
 
 
 def _render_op_nodes(
     pipeline_spec,
+    *,
     resolved_inputs: dict[str, dict[str, Any]],
+    resolved_attrs: dict[str, dict[str, Any]],
     node_outputs: dict[str, dict[str, Any]],
+    node_commands: dict[str, list[str]],
 ) -> list[str]:
     lines = ["  // Nodes"]
     current_stage: str | None = None
@@ -128,7 +155,8 @@ def _render_op_nodes(
             if current_stage:
                 lines.append(f"  // Stage: {current_stage}")
         lines.append(
-            f"  {_op_node_id(node.name)} [{_node_attrs(_op_label(node, resolved_inputs.get(node.name, {}), node_outputs.get(node.name, {})), fill='#FFFFFF', color='#CBD5E1')}] ;"
+            f"  {_op_node_id(node.name)} "
+            f"[{_html_node_attrs(_op_label(node, resolved_inputs.get(node.name, {}), resolved_attrs.get(node.name, {}), node_commands.get(node.name, []), node_outputs.get(node.name, {})), color='#CBD5E1')}] ;"
         )
     return lines
 
@@ -138,7 +166,9 @@ def _render_output_nodes(pipeline_spec, pipeline_outputs: dict[str, Any]) -> lis
     for item in pipeline_spec.outputs:
         node_id = _output_node_id(item.name)
         value = pipeline_outputs.get(item.name, _MISSING)
-        lines.append(f"  {node_id} [{_node_attrs(_output_label(item.name, value), fill='#ECFDF3', color='#86EFAC')}] ;")
+        lines.append(
+            f"  {node_id} [{_html_node_attrs(_output_label(item.name, value), color='#86EFAC')}] ;"
+        )
     return lines
 
 
@@ -222,6 +252,19 @@ def _resolve_node_inputs(
     return resolved
 
 
+def _resolve_node_attrs(pipeline_spec, case_spec) -> dict[str, dict[str, Any]]:
+    resolved: dict[str, dict[str, Any]] = {}
+    for node in pipeline_spec.nodes:
+        op_class = get_op_class(node.op_name)
+        attr_names = {item.name for item in op_class.spec.attrs}
+        values = dict(node.attrs)
+        for key, value in case_spec.inputs_by_node.get(node.name, {}).items():
+            if key in attr_names:
+                values[key] = value
+        resolved[node.name] = values
+    return resolved
+
+
 def _pipeline_input_values(pipeline_spec, case_spec) -> dict[str, Any]:
     values = dict(case_spec.inputs)
     pipeline_input_names = {item.name for item in pipeline_spec.inputs}
@@ -236,9 +279,13 @@ def _direct_node_inputs(pipeline_spec, case_spec) -> dict[str, dict[str, Any]]:
     pipeline_input_names = {item.name for item in pipeline_spec.inputs}
     direct_inputs: dict[str, dict[str, Any]] = {}
     for node in pipeline_spec.nodes:
+        op_class = get_op_class(node.op_name)
+        declared_inputs = {item.name for item in op_class.spec.inputs}
         bound_ports = {binding.target_port for binding in node.input_bindings}
         values: dict[str, Any] = {}
         for key, value in case_spec.inputs_by_node.get(node.name, {}).items():
+            if key not in declared_inputs:
+                continue
             if key in bound_ports or key in pipeline_input_names:
                 continue
             values[key] = value
@@ -248,66 +295,94 @@ def _direct_node_inputs(pipeline_spec, case_spec) -> dict[str, dict[str, Any]]:
 
 
 def _input_label(name: str, value: Any) -> str:
-    return _multiline_label(
-        f"input: {name}",
-        [
-            ("value", value),
-        ],
+    return _html_table_label(
+        title="INPUT",
+        subtitle=name,
+        sections=[("VALUE", _format_block(value))],
+        border_color="#93C5FD",
+        header_fill="#EAF4FF",
     )
 
 
 def _node_param_input_label(node_name: str, values: dict[str, Any]) -> str:
-    return _multiline_label(
-        f"input: {node_name}",
-        [
-            ("value", values),
-        ],
+    return _html_table_label(
+        title="INPUT",
+        subtitle=node_name,
+        sections=[("VALUE", _format_block(values))],
+        border_color="#BFDBFE",
+        header_fill="#EFF6FF",
     )
 
 
-def _op_label(node, inputs: dict[str, Any], outputs: dict[str, Any]) -> str:
-    attr_values = _visible_node_attrs(node, inputs)
-    sections: list[tuple[str, Any]] = []
+def _op_label(node, inputs: dict[str, Any], attrs: dict[str, Any], commands: list[str], outputs: dict[str, Any]) -> str:
+    sections: list[tuple[str, list[str]]] = []
     if inputs:
-        sections.append(("inputs", inputs))
-    if attr_values:
-        sections.append(("attrs", attr_values))
+        sections.append(("INPUTS", _format_block(inputs)))
+    if attrs:
+        sections.append(("PARAMS", _format_block(attrs)))
+    if commands:
+        sections.append(("COMMANDS", _format_commands(commands)))
     if outputs:
-        sections.append(("outputs", outputs))
-    return _multiline_label(
-        node.name,
-        sections,
-        subtitle=f"op: {node.op_name}",
+        sections.append(("OUTPUTS", _format_block(outputs)))
+    subtitle = f"{node.op_name}" if not node.stage else f"{node.op_name} | stage: {node.stage}"
+    return _html_table_label(
+        title=node.name,
+        subtitle=subtitle,
+        sections=sections,
+        border_color="#CBD5E1",
+        header_fill="#F8FAFC",
     )
 
 
 def _output_label(name: str, value: Any) -> str:
-    return _multiline_label(
-        f"output: {name}",
-        [
-            ("value", value),
-        ],
+    return _html_table_label(
+        title="OUTPUT",
+        subtitle=name,
+        sections=[("VALUE", _format_block(value))],
+        border_color="#86EFAC",
+        header_fill="#ECFDF3",
     )
 
 
-def _multiline_label(
-    header: str,
-    sections: list[tuple[str, Any]],
+def _html_table_label(
     *,
-    prefix: str | None = None,
-    subtitle: str | None = None,
+    title: str,
+    subtitle: str | None,
+    sections: list[tuple[str, list[str]]],
+    border_color: str,
+    header_fill: str,
 ) -> str:
-    lines = [header]
-    if prefix:
-        lines.insert(0, prefix)
-    if subtitle:
-        lines.append(subtitle)
-    for title, payload in sections:
-        if payload is _MISSING or payload in ({}, []):
+    rows = [
+        (
+            f'<TR><TD BGCOLOR="{header_fill}" ALIGN="LEFT" BALIGN="LEFT">'
+            f'<B>{_escape_html(title)}</B>'
+            f'{f"<BR ALIGN=\"LEFT\"/><FONT POINT-SIZE=\"10\">{_escape_html(subtitle)}</FONT>" if subtitle else ""}'
+            f"</TD></TR>"
+        )
+    ]
+    for section_title, lines in sections:
+        if not lines:
             continue
-        lines.append(f"{title}:")
-        lines.extend(f"  {line}" for line in _format_block(payload))
-    return _dot_multiline_text(lines)
+        content = "<BR ALIGN=\"LEFT\"/>".join(_escape_html(line) for line in lines)
+        rows.append(
+            "<TR><TD ALIGN=\"LEFT\" BALIGN=\"LEFT\">"
+            f"<B>{_escape_html(section_title)}</B>"
+            "<BR ALIGN=\"LEFT\"/>"
+            f'<FONT FACE="Courier">{content}</FONT>'
+            "</TD></TR>"
+        )
+    return (
+        f'<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="{border_color}">'
+        + "".join(rows)
+        + "</TABLE>"
+    )
+
+
+def _format_commands(commands: list[str]) -> list[str]:
+    lines: list[str] = []
+    for command in commands:
+        lines.extend(_wrap_text(_compact_command_text(command)))
+    return lines
 
 
 def _format_block(value: Any) -> list[str]:
@@ -337,7 +412,7 @@ def _format_block(value: Any) -> list[str]:
             lines.append("-")
             lines.extend(f"  {line}" for line in child_lines)
         return lines
-    return _wrap_text(str(value))
+    return _wrap_text(_compact_scalar_text(str(value)))
 
 
 def _wrap_prefixed(prefix: str, text: str) -> list[str]:
@@ -394,25 +469,66 @@ def _segment_text(text: str) -> list[str]:
     return tokens
 
 
-def _dot_multiline_text(lines: list[str]) -> str:
-    escaped = "\\l".join(_escape_dot(line) for line in lines if line is not None)
-    return f"{escaped}\\l"
+def _compact_scalar_text(text: str) -> str:
+    if _looks_like_path(text):
+        return _abbreviate_path(text)
+    return _middle_ellipsis(text, _MAX_INLINE_TEXT)
 
 
-def _visible_node_attrs(node, inputs: dict[str, Any]) -> dict[str, Any]:
-    if not node.attrs:
-        return {}
-    op_class = get_op_class(node.op_name)
-    input_names = {item.name for item in op_class.spec.inputs}
-    return {
-        key: value
-        for key, value in node.attrs.items()
-        if key not in input_names
-    }
+def _compact_command_text(text: str) -> str:
+    compacted_tokens: list[str] = []
+    for token in text.split():
+        compacted_tokens.append(_compact_command_token(token))
+    return _middle_ellipsis(" ".join(compacted_tokens), _MAX_INLINE_TEXT)
 
 
-def _node_attrs(label: str, *, fill: str, color: str) -> str:
-    return f'label="{label}", fillcolor="{fill}", color="{color}", width={_NODE_WIDTH}'
+def _compact_command_token(token: str) -> str:
+    if "=" in token:
+        prefix, suffix = token.split("=", 1)
+        if _looks_like_path(suffix):
+            return f"{prefix}={_abbreviate_path(suffix)}"
+    if _looks_like_path(token):
+        return _abbreviate_path(token)
+    return token
+
+
+def _looks_like_path(text: str) -> bool:
+    candidate = text.strip("'\"")
+    return "/" in candidate or candidate.startswith(("~", "./", "../"))
+
+
+def _abbreviate_path(text: str) -> str:
+    candidate = text.strip("'\"")
+    if len(candidate) <= _MAX_PATH_TEXT:
+        return text
+    suffix = ""
+    prefix = ""
+    if text.startswith(("'", '"')) and text.endswith(("'", '"')) and len(text) >= 2:
+        prefix = text[0]
+        suffix = text[-1]
+    normalized = candidate.replace("\\", "/")
+    parts = [part for part in normalized.split("/") if part]
+    if len(parts) <= 3:
+        compact = _middle_ellipsis(candidate, _MAX_PATH_TEXT)
+        return f"{prefix}{compact}{suffix}" if prefix or suffix else compact
+    head = parts[:2]
+    tail = parts[-2:]
+    compact = "/".join([*head, "...", *tail])
+    if candidate.startswith("/"):
+        compact = "/" + compact
+    return f"{prefix}{compact}{suffix}" if prefix or suffix else compact
+
+
+def _middle_ellipsis(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    head = max((limit - 3) // 2, 8)
+    tail = max(limit - 3 - head, 8)
+    return f"{text[:head]}...{text[-tail:]}"
+
+
+def _html_node_attrs(label_html: str, *, color: str) -> str:
+    return f"label=<{label_html}>, color=\"{color}\", width={_NODE_WIDTH}"
 
 
 def _input_node_id(name: str) -> str:
@@ -437,6 +553,10 @@ def _safe_id(value: str) -> str:
 
 def _escape_dot(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _escape_html(value: str) -> str:
+    return html.escape(value, quote=False)
 
 
 _MISSING = object()

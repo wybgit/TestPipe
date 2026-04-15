@@ -179,6 +179,7 @@ class TestEngine:
                 run_dir=run_dir,
                 node_outputs=context.node_outputs,
                 pipeline_outputs=outputs,
+                node_commands=self._collect_node_commands(trace_recorder),
             )
         return summary
 
@@ -571,6 +572,7 @@ class TestEngine:
         run_dir: Path,
         node_outputs: dict[str, dict[str, Any]],
         pipeline_outputs: dict[str, object],
+        node_commands: dict[str, list[str]],
     ) -> None:
         try:
             export_pipeline_graph(
@@ -580,10 +582,20 @@ class TestEngine:
                 basename="pipeline_graph",
                 node_outputs=node_outputs,
                 pipeline_outputs=pipeline_outputs,
+                node_commands=node_commands,
                 render_pdf=True,
             )
         except Exception as exc:  # noqa: BLE001
             (run_dir / "pipeline_graph.error.txt").write_text(str(exc) + "\n", encoding="utf-8")
+
+    def _collect_node_commands(self, trace_recorder: TraceRecorder) -> dict[str, list[str]]:
+        commands: dict[str, list[str]] = {}
+        for event in trace_recorder.events:
+            rendered = self._render_event_command(event)
+            if not rendered:
+                continue
+            commands.setdefault(event.step_name, []).append(rendered)
+        return commands
 
     def _indent_wrapped(self, text: str, *, prefix: str, width: int = 100) -> list[str]:
         wrapped = textwrap.wrap(text, width=width, break_long_words=False, break_on_hyphens=False)

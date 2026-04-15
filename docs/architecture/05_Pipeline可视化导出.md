@@ -50,11 +50,13 @@ testpipe export-pipeline-graph examples/testcases/onnx_git_atc.yaml --output-dir
 
 - 流向固定为从上到下，即 `rankdir=TB`。
 - 输入、节点、输出分别使用不同配色。
-- 节点主体显示：节点名、算子名、以及 IBO 信息。
-- 输入参数直接显示在图里，便于复盘实际执行值。
+- 节点主体按区块显示：输入、参数、执行指令、输出。
+- 区块标题使用加粗标识，便于快速区分重点信息。
+- 输入参数和节点属性直接显示在图里，便于复盘实际执行值。
+- 执行后的导图会展示节点实际执行过的具体指令。
 - 只显示真正有值的可选输入；可选输入未传时不出现在图上。
-- 节点内过长路径会按固定宽度自动换行，避免节点被路径撑得过宽。
-- `input/output` 不做复杂包裹，尽量保持和参考图一致的简洁风格。
+- 过长路径和长命令会做中间缩略，并保留关键首尾信息。
+- 节点内文本会按固定宽度自动换行，避免节点被长路径或长指令撑得过宽。
 
 ## 4. 输入与属性展示策略
 
@@ -87,6 +89,16 @@ testpipe export-pipeline-graph examples/testcases/onnx_git_atc.yaml --output-dir
 - `compileModelNode.env_script`
 - `compileModelNode.atc_options`
 - `compileModelNode.output_name`
+
+### 4.4 执行指令
+
+如果导图发生在真实执行之后，节点主体会额外显示 `COMMANDS` 区域。
+
+这部分来自节点执行时记录到 trace 的真实命令，例如：
+
+- `git init / git fetch / git checkout`
+- `bash -lc ...`
+- `cp source target`
 
 ## 5. 导图内容来源
 

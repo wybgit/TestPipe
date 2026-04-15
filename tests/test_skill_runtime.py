@@ -534,11 +534,14 @@ class SkillRuntimeTest(unittest.TestCase):
             self.assertIn("OnnxGitAtcPipeline", dot_text)
             self.assertIn("rankdir=TB", dot_text)
             self.assertIn("Ascend310P3", dot_text)
-            self.assertIn("input: compileModelNode", dot_text)
-            self.assertNotIn("input: resource_ref", dot_text)
-            self.assertNotIn("input: atc_options", dot_text)
+            self.assertIn("INPUT", dot_text)
+            self.assertIn("PARAMS", dot_text)
+            self.assertIn("compileModelNode", dot_text)
+            self.assertNotIn("resource_ref", dot_text)
+            self.assertNotIn("atc_options", dot_text)
             self.assertNotIn("<pipeline:atc_options>", dot_text)
             self.assertIn("output_name: model.om", dot_text)
+            self.assertNotIn("COMMANDS", dot_text)
 
 
 if __name__ == "__main__":
