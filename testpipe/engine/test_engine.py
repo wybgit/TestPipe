@@ -55,7 +55,8 @@ class TestEngine:
             for step in plan:
                 node_spec = pipeline_spec.node_map()[step.node_name]
                 op_class = get_op_class(node_spec.op_name)
-                op = op_class(**node_spec.attrs)
+                merged_attrs = self._merge_step_attrs(node_spec, op_class, context)
+                op = op_class(**merged_attrs)
                 step_dir = run_dir / "steps" / f"{step.index:02d}_{step.node_name}"
                 step_dir.mkdir(parents=True, exist_ok=True)
                 stdout_log = step_dir / "stdout.log"
@@ -73,7 +74,7 @@ class TestEngine:
                     stdout_log_path=str(stdout_log),
                     stderr_log_path=str(stderr_log),
                     inputs=MappingView(collected_inputs),
-                    attrs=MappingView(node_spec.attrs),
+                    attrs=MappingView(merged_attrs),
                     host=host_executor,
                     device=device_executor if device_executor.enabled() else None,
                     transfer=transfer_executor if transfer_executor.enabled() else None,
@@ -113,14 +114,15 @@ class TestEngine:
                         self._append_step_error(stderr_log, f"[teardown] {teardown_exc}")
                     duration_ms = int((perf_counter() - step_started) * 1000)
                     rendered_outputs = self._select_visible_outputs(outputs, visible_outputs)
-                    node_type = self._node_type_label(node_spec, op_class, display_inputs, step_events)
-                    checks = self._build_checks(node_spec, op_class, display_inputs, rendered_outputs)
+                    node_type = self._node_type_label(merged_attrs, op_class, display_inputs, step_events)
+                    checks = self._build_checks(op_class, display_inputs, merged_attrs, rendered_outputs)
                     step_result = self._build_step_result(
                         step=step,
                         total_steps=len(plan),
                         node_spec=node_spec,
                         node_type=node_type,
                         step_inputs=display_inputs,
+                        step_attrs=merged_attrs,
                         step_events=step_events,
                         outputs=rendered_outputs,
                         checks=checks,
@@ -188,6 +190,7 @@ class TestEngine:
         node_spec,
         node_type: str,
         step_inputs: dict[str, object],
+        step_attrs: dict[str, object],
         step_events,
         outputs: dict[str, object],
         checks: dict[str, object],
@@ -204,13 +207,23 @@ class TestEngine:
             "status": status,
             "duration_ms": duration_ms,
             "inputs": step_inputs,
-            "params": dict(node_spec.attrs),
+            "params": dict(step_attrs),
             "commands": self._build_step_commands(node_spec.op_name, step_inputs, step_events),
             "execution_logs": self._build_execution_logs(node_spec.op_name, step_events),
             "outputs": outputs,
             "checks": checks,
             "error": failure_message,
         }
+
+    def _merge_step_attrs(self, node_spec, op_class, context: ExecutionContext) -> dict[str, object]:
+        attrs = dict(node_spec.attrs)
+        attr_names = {item.name for item in op_class.spec.attrs}
+        if not attr_names:
+            return attrs
+        for key, value in context.case_spec.inputs_by_node.get(node_spec.name, {}).items():
+            if key in attr_names:
+                attrs[key] = value
+        return attrs
 
     def _emit_step_block(self, execution_log_path: Path, step_result: dict[str, Any]) -> None:
         body_lines = self._render_step_body(step_result)
@@ -250,7 +263,7 @@ class TestEngine:
                 continue
 
         for key, value in context.case_spec.inputs_by_node.get(node_spec.name, {}).items():
-            if key not in bound_ports:
+            if key in declared_ports and key not in bound_ports:
                 inputs[key] = value
 
         for item in pipeline_spec.inputs:
@@ -388,10 +401,10 @@ class TestEngine:
             return "OUTPUT"
         return None
 
-    def _node_type_label(self, node_spec, op_class, step_inputs: dict[str, object], step_events) -> str:
+    def _node_type_label(self, step_attrs: dict[str, object], op_class, step_inputs: dict[str, object], step_events) -> str:
         if is_assert_op_class(op_class):
             return "OUTPUT"
-        if step_inputs or node_spec.attrs or step_events or node_spec.input_bindings:
+        if step_inputs or step_attrs or step_events:
             return "EXEC"
         return "INPUT"
 
@@ -408,7 +421,7 @@ class TestEngine:
         body_lines.extend(self._format_section("CHECK", step_result["checks"]))
         return body_lines
 
-    def _build_checks(self, node_spec, op_class, step_inputs: dict[str, object], outputs: dict[str, object]) -> dict[str, object]:
+    def _build_checks(self, op_class, step_inputs: dict[str, object], step_attrs: dict[str, object], outputs: dict[str, object]) -> dict[str, object]:
         if not is_assert_op_class(op_class):
             return {}
 
@@ -426,10 +439,10 @@ class TestEngine:
             if key in step_inputs:
                 checks[key] = step_inputs[key]
         for key in ("expected_value", "operator", "expectations"):
-            if key in node_spec.attrs:
+            if key in step_attrs:
                 if key in checks:
                     continue
-                checks[key] = node_spec.attrs[key]
+                checks[key] = step_attrs[key]
         if "test_passed" in outputs:
             checks["check_result"] = outputs["test_passed"]
         elif "path_exists" in outputs:
@@ -442,25 +455,21 @@ class TestEngine:
             return commands
 
         if any(getattr(event, "action_type", "") == "resource.archive_download" for event in step_events):
-            resource_ref = step_inputs.get("resource_ref")
-            if isinstance(resource_ref, dict):
-                repo = resource_ref.get("repo", "")
-                git_ref = resource_ref.get("ref", "HEAD")
-                subpath = resource_ref.get("subpath", "")
-                return [f"github archive fetch repo={repo} ref={git_ref} subpath={subpath}"]
-
-        resource_ref = step_inputs.get("resource_ref")
-        if isinstance(resource_ref, dict):
-            repo = resource_ref.get("repo", "")
-            git_ref = resource_ref.get("ref", "HEAD")
-            subpath = resource_ref.get("subpath", "")
             return [
-                f"git sparse-fetch repo={repo} ref={git_ref} subpath={subpath} (full git commands hidden; use --debug)"
+                "github archive fetch "
+                f"repo={step_inputs.get('repo', '')} "
+                f"branch={step_inputs.get('branch', 'HEAD')} "
+                f"path={step_inputs.get('path', '')}"
             ]
 
-        resource_path = step_inputs.get("resource_path")
-        if resource_path is not None:
-            return [f"fetch local resource path={resource_path}"]
+        if step_inputs:
+            return [
+                "git sparse-fetch "
+                f"repo={step_inputs.get('repo', '')} "
+                f"branch={step_inputs.get('branch', 'HEAD')} "
+                f"path={step_inputs.get('path', '')} "
+                "(full git commands hidden; use --debug)"
+            ]
         return commands
 
     def _build_execution_logs(self, op_name: str, step_events) -> dict[str, str]:
@@ -534,7 +543,7 @@ class TestEngine:
         return rendered
 
     def _visible_output_names(self, op_class) -> set[str]:
-        return {item.name for item in op_class.spec.outputs if getattr(item, "expose", True)}
+        return {item.name for item in op_class.spec.outputs}
 
     def _select_visible_outputs(self, outputs: dict[str, Any], visible_output_names: set[str]) -> dict[str, Any]:
         return {key: value for key, value in outputs.items() if key in visible_output_names}

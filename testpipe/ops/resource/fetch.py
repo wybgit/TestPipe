@@ -10,121 +10,89 @@ from urllib.parse import urlparse
 from urllib.request import urlopen
 
 from testpipe.core import TestOp, register_op
-from testpipe.spec import OpSpec, PortSpec
+from testpipe.spec import AttrSpec, OpSpec, PortSpec
 
 
 @register_op
 class ResourceFetchOp(TestOp):
-    """Materialize a local or git-backed resource into the run workspace."""
+    """Materialize a git-backed resource into the run workspace."""
 
     spec = OpSpec(
         version="1.0",
-        description="Fetch a local or git-backed resource into the execution workspace",
+        description="Fetch a git repository subpath into the execution workspace and resolve a model file",
         inputs=[
-            PortSpec(name="resource_path", type="artifact:path", required=False, description="source resource path"),
-            PortSpec(name="resource_ref", type="object", required=False, description="structured resource reference"),
-            PortSpec(name="repo", type="string", required=False, description="git repository url or local git repo path"),
-            PortSpec(name="path", type="string", required=False, description="git repository file or directory path"),
-            PortSpec(name="ref", type="string", required=False, description="git ref, branch, tag, or commit"),
-            PortSpec(name="model_pattern", type="string", required=False, description="model discovery pattern under a directory"),
+            PortSpec(name="repo", type="string", description="git repository url or local git repo path"),
+            PortSpec(name="branch", type="string", description="git branch to fetch"),
+            PortSpec(name="path", type="string", description="git repository file or directory path"),
         ],
         outputs=[
             PortSpec(
                 name="model_path",
                 type="artifact:path",
-                description="workspace-local model path",
+                description="model file path matched by model_pattern",
             ),
         ],
-        attrs=[],
+        attrs=[
+            AttrSpec(
+                name="model_pattern",
+                type="string",
+                required=False,
+                default="*.onnx",
+                description="model discovery pattern under the fetched directory",
+            ),
+        ],
     )
 
     def execute(self, step_context) -> dict[str, str]:
-        resource_ref = step_context.inputs.get("resource_ref")
         target_root = Path(step_context.artifacts.root_dir) / f"{step_context.node_name}_resource"
         self._remove_path(target_root)
-
-        simple_git_ref = self._build_simple_git_resource_ref(step_context)
-        if resource_ref is not None or simple_git_ref is not None:
-            if not isinstance(resource_ref, dict):
-                if simple_git_ref is None:
-                    raise RuntimeError("resource_ref must be an object")
-            resource_ref = simple_git_ref or resource_ref
-            materialized_path, _ = self._fetch_resource_ref(step_context, resource_ref, target_root)
-        else:
-            source_root = self._resolve_local_resource(step_context)
-            materialized_path = self._materialize_local_resource(source_root, target_root)
+        materialized_path, _ = self._fetch_git_dir(
+            step_context,
+            repo=str(step_context.inputs.require("repo")),
+            subpath=self._normalize_subpath(str(step_context.inputs.require("path"))),
+            branch=str(step_context.inputs.require("branch")),
+            target_root=target_root,
+        )
 
         model_path = self._discover_model_path(
             materialized_path,
-            pattern=self._resource_model_pattern(resource_ref),
+            pattern=str(step_context.attrs.get("model_pattern", "*.onnx")),
         )
         return {
             "model_path": str(model_path),
         }
 
-    def _build_simple_git_resource_ref(self, step_context) -> dict[str, object] | None:
-        repo = step_context.inputs.get("repo")
-        path = step_context.inputs.get("path")
-        if repo is None and path is None:
-            return None
-        if not repo or not path:
-            raise RuntimeError("repo and path must be provided together")
-        payload: dict[str, object] = {
-            "kind": "git_dir",
-            "repo": str(repo),
-            "subpath": str(path),
-        }
-        git_ref = step_context.inputs.get("ref")
-        if git_ref is not None:
-            payload["ref"] = str(git_ref)
-        model_pattern = step_context.inputs.get("model_pattern")
-        if model_pattern is not None:
-            payload["model_pattern"] = str(model_pattern)
-        return payload
-
-    def _fetch_resource_ref(self, step_context, resource_ref: dict[str, object], target_root: Path) -> tuple[Path, str]:
-        kind = str(resource_ref.get("kind", "")).strip()
-        if kind in {"local_dir", "local_file"}:
-            path = resource_ref.get("path")
-            if not path:
-                raise RuntimeError("resource_ref.path is required for local resources")
-            source = Path(str(path)).expanduser().resolve()
-            if not source.exists():
-                raise RuntimeError(f"resource not found: {source}")
-            return self._materialize_local_resource(source, target_root), ""
-
-        if kind == "git_dir":
-            repo = resource_ref.get("repo")
-            subpath = resource_ref.get("subpath")
-            git_ref = resource_ref.get("ref")
-            if not repo or not subpath:
-                raise RuntimeError("resource_ref.repo and resource_ref.subpath are required for git_dir")
-            normalized_subpath = self._normalize_subpath(str(subpath))
-            try:
-                return self._fetch_git_dir_via_git(
-                    step_context,
-                    repo=str(repo),
-                    subpath=normalized_subpath,
-                    git_ref=str(git_ref) if git_ref else None,
-                    resource_ref=resource_ref,
-                    target_root=target_root,
-                )
-            except Exception as exc:
-                fallback = self._fetch_git_dir_via_github_archive(
-                    step_context,
-                    repo=str(repo),
-                    subpath=normalized_subpath,
-                    git_ref=str(git_ref) if git_ref else None,
-                    target_root=target_root,
-                    cause=exc,
-                )
-                if fallback is not None:
-                    return fallback
-                if isinstance(exc, RuntimeError):
-                    raise
-                raise RuntimeError(str(exc)) from exc
-
-        raise RuntimeError(f"unsupported resource_ref.kind: {kind}")
+    def _fetch_git_dir(
+        self,
+        step_context,
+        *,
+        repo: str,
+        subpath: str,
+        branch: str,
+        target_root: Path,
+    ) -> tuple[Path, str]:
+        try:
+            return self._fetch_git_dir_via_git(
+                step_context,
+                repo=repo,
+                subpath=subpath,
+                branch=branch,
+                target_root=target_root,
+            )
+        except Exception as exc:
+            fallback = self._fetch_git_dir_via_github_archive(
+                step_context,
+                repo=repo,
+                subpath=subpath,
+                branch=branch,
+                target_root=target_root,
+                cause=exc,
+            )
+            if fallback is not None:
+                return fallback
+            if isinstance(exc, RuntimeError):
+                raise
+            raise RuntimeError(str(exc)) from exc
 
     def _fetch_git_dir_via_git(
         self,
@@ -132,8 +100,7 @@ class ResourceFetchOp(TestOp):
         *,
         repo: str,
         subpath: str,
-        git_ref: str | None,
-        resource_ref: dict[str, object],
+        branch: str,
         target_root: Path,
     ) -> tuple[Path, str]:
         self._remove_path(target_root)
@@ -151,15 +118,9 @@ class ResourceFetchOp(TestOp):
         fetch_command = ["git", "-C", str(target_root), "fetch", "--depth=1"]
         if self._supports_partial_clone(repo):
             fetch_command.append("--filter=blob:none")
-        fetch_command.append("origin")
-        if git_ref:
-            fetch_command.append(git_ref)
+        fetch_command.extend(["origin", branch])
         step_context.host.exec(fetch_command)
         step_context.host.exec(["git", "-C", str(target_root), "checkout", "--detach", "FETCH_HEAD"])
-
-        git_options = resource_ref.get("git", {})
-        if isinstance(git_options, dict) and bool(git_options.get("lfs", False)):
-            step_context.host.exec(["git", "-C", str(target_root), "lfs", "pull"])
 
         resolved_commit = step_context.host.exec(["git", "-C", str(target_root), "rev-parse", "HEAD"]).stdout.strip()
         materialized_path = (target_root / subpath).resolve()
@@ -174,16 +135,16 @@ class ResourceFetchOp(TestOp):
         *,
         repo: str,
         subpath: str,
-        git_ref: str | None,
+        branch: str,
         target_root: Path,
         cause: Exception,
     ) -> tuple[Path, str] | None:
-        archive_url = self._github_archive_url(repo, git_ref)
+        archive_url = self._github_archive_url(repo, branch)
         if archive_url is None:
             return None
 
-        resolved_commit = self._resolve_remote_commit(step_context, repo, git_ref)
-        archive_ref = resolved_commit or git_ref or "HEAD"
+        resolved_commit = self._resolve_remote_commit(step_context, repo, branch)
+        archive_ref = resolved_commit or branch or "HEAD"
         archive_url = self._github_archive_url(repo, archive_ref)
         if archive_url is None:
             return None
@@ -216,8 +177,8 @@ class ResourceFetchOp(TestOp):
         )
         return materialized_path, resolved_commit
 
-    def _resolve_remote_commit(self, step_context, repo: str, git_ref: str | None) -> str:
-        ref = git_ref or "HEAD"
+    def _resolve_remote_commit(self, step_context, repo: str, branch: str | None) -> str:
+        ref = branch or "HEAD"
         try:
             result = step_context.host.exec(["git", "ls-remote", repo, ref])
         except Exception:
@@ -286,7 +247,7 @@ class ResourceFetchOp(TestOp):
     def _normalize_subpath(self, subpath: str) -> str:
         normalized = subpath.strip().strip("/")
         if not normalized:
-            raise RuntimeError("resource_ref.subpath must not be empty")
+            raise RuntimeError("path must not be empty")
         return normalized
 
     def _supports_partial_clone(self, repo: str) -> bool:
@@ -300,17 +261,6 @@ class ResourceFetchOp(TestOp):
             shutil.rmtree(path)
             return
         path.unlink()
-
-    def _resolve_local_resource(self, step_context) -> Path:
-        source = Path(str(step_context.inputs.require("resource_path"))).expanduser().resolve()
-        if not source.exists():
-            raise RuntimeError(f"resource not found: {source}")
-        return source
-
-    def _resource_model_pattern(self, resource_ref: object) -> str:
-        if isinstance(resource_ref, dict):
-            return str(resource_ref.get("model_pattern", "*.onnx"))
-        return "*.onnx"
 
     def _discover_model_path(self, resource_root: Path, *, pattern: str) -> Path:
         if resource_root.is_file():

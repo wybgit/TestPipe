@@ -71,16 +71,14 @@ class SkillRuntimeTest(unittest.TestCase):
         return {
             "pipeline": {
                 "name": "OnnxGitAtcPipeline",
-                "envCheckNode": {
-                    "env_script": env_script,
-                },
                 "fetchModelNode": {
                     "repo": repo,
-                    "ref": "Abs",
+                    "branch": "Abs",
                     "path": "Abs_testcase_5a6b43",
                     "model_pattern": "*.onnx",
                 },
                 "compileModelNode": {
+                    "env_script": env_script,
                     "soc_version": "Ascend310P3",
                 },
             },
@@ -99,8 +97,8 @@ class SkillRuntimeTest(unittest.TestCase):
             {
                 "pipeline": {
                     "name": "OnnxGitAtcPipeline",
-                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo", "subpath": "model"}},
-                    "compileModelNode": {"soc_version": "Ascend310P3"},
+                    "fetchModelNode": {"repo": "repo", "branch": "main", "path": "model"},
+                    "compileModelNode": {"soc_version": "Ascend310P3", "env_script": "/tmp/set_env.sh"},
                 },
                 "cases": [
                     {
@@ -259,7 +257,7 @@ class SkillRuntimeTest(unittest.TestCase):
                     "cases": [
                         {
                             "case_id": "onnx_case",
-                            "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo", "subpath": "model"}},
+                            "fetchModelNode": {"repo": "repo", "branch": "main", "path": "model"},
                             "compileModelNode": {"soc_version": "Ascend310P3"},
                         }
                     ],
@@ -292,14 +290,12 @@ class SkillRuntimeTest(unittest.TestCase):
                     "inputs_by_node": {
                         "fetchModelNode": {
                             "repo": repo_dir,
-                            "ref": "Abs",
+                            "branch": "Abs",
                             "path": "Abs_testcase_5a6b43",
                             "model_pattern": "*.onnx",
                         },
-                        "envCheckNode": {
-                            "env_script": env_script,
-                        },
                         "compileModelNode": {
+                            "env_script": env_script,
                             "soc_version": "Ascend310P3",
                             "output_name": "abs_model.om",
                         },
@@ -327,7 +323,7 @@ class SkillRuntimeTest(unittest.TestCase):
         payload = {
             "pipeline": {
                 "name": "OnnxGitAtcPipeline",
-                "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo", "subpath": "model"}},
+                "fetchModelNode": {"repo": "repo", "branch": "main", "path": "model"},
                 "compileModelNode": {"soc_version": "Ascend310P3"},
             },
             "cases": [
@@ -354,13 +350,14 @@ class SkillRuntimeTest(unittest.TestCase):
                 "name": "InlineCase",
                 "case_id": "inline_case",
                 "pipeline": "OnnxGitAtcPipeline",
-                "inputs": {
-                    "soc_version": "Ascend310P3",
-                },
+                "inputs": {},
                 "inputs_by_node": {
                     "fetchModelNode": {
-                        "resource_ref": {"kind": "git_dir", "repo": "repo", "subpath": "model"},
+                        "repo": "repo",
+                        "branch": "main",
+                        "path": "model",
                     },
+                    "compileModelNode": {"soc_version": "Ascend310P3"},
                 },
                 "expected": {"path_exists": True},
             },
@@ -386,12 +383,12 @@ class SkillRuntimeTest(unittest.TestCase):
                 "cases": [
                     {
                         "case_id": "suite_a",
-                        "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"}},
+                        "fetchModelNode": {"repo": "repo_a", "branch": "main", "path": "model_a"},
                         "compileModelNode": {"soc_version": "Ascend310P3"},
                     },
                     {
                         "case_id": "suite_b",
-                        "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_b", "subpath": "model_b"}},
+                        "fetchModelNode": {"repo": "repo_b", "branch": "main", "path": "model_b"},
                         "compileModelNode": {"soc_version": "Ascend310P3"},
                     },
                 ],
@@ -537,11 +534,11 @@ class SkillRuntimeTest(unittest.TestCase):
             self.assertIn("OnnxGitAtcPipeline", dot_text)
             self.assertIn("rankdir=TB", dot_text)
             self.assertIn("Ascend310P3", dot_text)
-            self.assertIn("input: envCheckNode", dot_text)
+            self.assertIn("input: compileModelNode", dot_text)
             self.assertNotIn("input: resource_ref", dot_text)
             self.assertNotIn("input: atc_options", dot_text)
             self.assertNotIn("<pipeline:atc_options>", dot_text)
-            self.assertNotIn("output_name", dot_text)
+            self.assertIn("output_name: model.om", dot_text)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,6 @@ class PortSpec:
     description: str = ""
     artifact_kind: str | None = None
     default: Any | None = None
-    expose: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

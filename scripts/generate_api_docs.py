@@ -153,18 +153,17 @@ def _render_pipelines_doc() -> str:
 
 def _ports_table(items: list[Any]) -> str:
     if not items:
-        return "| Name | Type | Required | Expose | Default | Description |\n| --- | --- | --- | --- | --- | --- |\n| - | - | - | - | - | 无 |"
+        return "| Name | Type | Required | Default | Description |\n| --- | --- | --- | --- | --- |\n| - | - | - | - | 无 |"
     lines = [
-        "| Name | Type | Required | Expose | Default | Description |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| Name | Type | Required | Default | Description |",
+        "| --- | --- | --- | --- | --- |",
     ]
     for item in items:
         lines.append(
-            "| {name} | {type} | {required} | {expose} | {default} | {description} |".format(
+            "| {name} | {type} | {required} | {default} | {description} |".format(
                 name=_escape_cell(item.name),
                 type=_escape_cell(item.type),
                 required="yes" if item.required else "no",
-                expose="yes" if getattr(item, "expose", True) else "no",
                 default=_escape_cell(_render_default(getattr(item, "default", None))),
                 description=_escape_cell(item.description or "-"),
             )

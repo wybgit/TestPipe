@@ -1,6 +1,6 @@
 # Pipeline Python 实现
 
-本文档描述当前 TestPipe 中已经落地的 Pipeline Python DSL 实现，而不是早期的 `forward()` 风格原型。
+本文档描述当前 TestPipe 中已经落地的 Pipeline Python DSL 实现。
 
 ## 1. 当前实现位置
 
@@ -59,28 +59,21 @@ class Pipeline(ABC):
 
 ## 5. 推荐写法
 
-### 5.1 先定义流程级输入
+### 5.1 先定义真正需要提升到流程级的输入
 
-```python
-soc_version = self.add_input("soc_version", "string", description="target soc version")
-```
+如果某个值只是节点属性，优先保留在节点里，通过默认值或 testcase 在线覆盖，不要强行提升成 Pipeline 输入。
 
 ### 5.2 再按串行流程定义节点
 
 ```python
 self.set_stage("prepare")
-env_check = self.add_node("envCheckNode", EnvCheckOp())
 fetch_model = self.add_node("fetchModelNode", ResourceFetchOp())
 
 self.set_stage("compile")
 compile_model = self.add_node(
     "compileModelNode",
     ATCCompileOp(output_name="model.om", timeout=600),
-    inputs={
-        "model_path": fetch_model.output("model_path"),
-        "soc_version": soc_version,
-        "env_script": env_check.output("env_script"),
-    },
+    inputs={"model_path": fetch_model.output("model_path")},
 )
 ```
 
@@ -100,25 +93,14 @@ class OnnxGitAtcPipeline(Pipeline):
     """Fetch an ONNX model from git resources and compile it into OM through ATC."""
 
     def define(self) -> None:
-        soc_version = self.add_input("soc_version", "string", description="target soc version")
-        atc_options = self.add_input("atc_options", "object", required=False, description="extra atc options")
-        output_name = self.add_input("output_name", "string", required=False, description="output om file name")
-
         self.set_stage("prepare")
-        env_check = self.add_node("envCheckNode", EnvCheckOp())
         fetch_model = self.add_node("fetchModelNode", ResourceFetchOp())
 
         self.set_stage("compile")
         compile_model = self.add_node(
             "compileModelNode",
             ATCCompileOp(output_name="model.om", timeout=600),
-            inputs={
-                "model_path": fetch_model.output("model_path"),
-                "soc_version": soc_version,
-                "atc_options": atc_options,
-                "output_name": output_name,
-                "env_script": env_check.output("env_script"),
-            },
+            inputs={"model_path": fetch_model.output("model_path")},
         )
 
         self.set_stage("assert")
@@ -135,8 +117,8 @@ class OnnxGitAtcPipeline(Pipeline):
 
 当前推荐的判断标准是：
 
-- 只被单个节点消费、且更适合贴近资源定义的参数，直接放在节点输入里，例如 `fetchModelNode.repo / ref / path / model_pattern`。
-- 需要作为流程公共入口暴露的参数，再定义成 Pipeline 输入，例如 `soc_version / atc_options / output_name`。
+- 节点输入只保留真正沿图流转的值，例如 `fetchModelNode.repo / branch / path` 与 `compileModelNode.model_path`。
+- 节点属性用于默认值或在线覆盖，例如 `fetchModelNode.model_pattern`、`compileModelNode.soc_version / env_script / atc_options / output_name`。
 
 ## 7. 编译流程
 
@@ -157,16 +139,9 @@ Python DSL 不直接执行。执行前会先编译成 `PipelineSpec`。
 - Case 校验
 - API 文档生成
 
-## 8. 为什么不再使用旧设计
+## 8. 当前 DSL 的特点
 
-旧文档里的 `forward()` / `op_type` / 自动注册 `_ops` 方案已经不再适用，原因是：
-
-- 不利于静态导出结构。
-- 图关系不够明确。
-- 与当前按文件夹组织 Op/Pipeline 的实现不一致。
-- 会引入与运行时逻辑耦合过深的问题。
-
-当前 DSL 更强调“显式构图”：
+当前 DSL 强调“显式构图”：
 
 - 输入是什么
 - 节点是什么

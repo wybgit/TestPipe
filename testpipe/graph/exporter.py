@@ -209,7 +209,7 @@ def _resolve_node_inputs(
                 )
 
         for key, value in case_spec.inputs_by_node.get(node.name, {}).items():
-            if key not in bound_ports:
+            if key in declared_ports and key not in bound_ports:
                 values[key] = value
 
         for item in pipeline_spec.inputs:

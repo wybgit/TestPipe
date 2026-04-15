@@ -76,9 +76,13 @@ class CaseChecker:
 
             node_spec = node_specs[node_name]
             op_class = get_op_class(node_spec.op_name)
-            op_input_names = {item.name for item in op_class.spec.inputs}
+            op_inputs = {item.name: item for item in op_class.spec.inputs}
+            op_input_names = set(op_inputs.keys())
+            op_attr_names = {item.name for item in op_class.spec.attrs}
             connected_ports = edge_targets.get(node_name, set())
             for port_name in sorted(node_inputs):
+                if port_name in op_attr_names:
+                    continue
                 if port_name not in op_input_names:
                     issues.append(
                         IssueSpec(
@@ -101,6 +105,25 @@ class CaseChecker:
                         )
                     )
                     fix_suggestions.append(f"不要在用例里为 {node_name}.{port_name} 赋值，改为修改其上游节点或 Pipeline 设计")
+
+            satisfied_op_inputs = set(connected_ports)
+            satisfied_op_inputs.update(port_name for port_name in node_inputs if port_name in op_input_names)
+            satisfied_op_inputs.update(
+                port_name
+                for port_name in case_spec.inputs
+                if port_name in op_input_names and port_name not in connected_ports
+            )
+            for port_name, port_spec in op_inputs.items():
+                if not port_spec.required or port_name in satisfied_op_inputs:
+                    continue
+                issues.append(
+                    IssueSpec(
+                        level="error",
+                        field=f"inputs_by_node.{node_name}.{port_name}",
+                        message=f"missing required input for op '{node_spec.op_name}'",
+                    )
+                )
+                fix_suggestions.append(f"补充节点 {node_name} 的必填输入 {port_name}")
 
         output_names = {item.name for item in pipeline_spec.outputs}
         for expected_name in sorted(case_spec.expected.keys()):

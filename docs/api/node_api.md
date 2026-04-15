@@ -98,17 +98,15 @@ fetch_model = self.add_node("fetchModelNode", ResourceFetchOp())
 compile_model = self.add_node(
     "compileModelNode",
     ATCCompileOp(),
-    inputs={
-        "model_path": fetch_model.output("model_path"),
-        "soc_version": soc_version,
-    },
+    inputs={"model_path": fetch_model.output("model_path")},
 )
 ```
 
 说明：
 
 - 如果某个参数只属于单个节点，例如 `fetchModelNode.repo`，推荐直接在 testcase 里写到该节点下，不需要强行提升成 Pipeline 输入。
-- 只有需要在图层面明确暴露、复用或统一校验的参数，才建议通过 `add_input()` 提升为 Pipeline 输入。
+- 只有需要在图层面流转、复用或统一校验的参数，才建议通过 `add_input()` 提升为 Pipeline 输入。
+- 算子属性不走图输入绑定。属性通常在算子构造时提供离线默认值，也可以在 testcase 的 `inputs_by_node.<node>` 下按同名字段做在线覆盖。
 
 ## 4. 节点 Spec 模型
 
@@ -210,6 +208,16 @@ check_om = self.add_node("checkOmExistsNode", PathExistsOp(), inputs={"target_pa
 
 - Pipeline 输入传入
 - 或 Case 的 `inputs_by_node` 在执行时补充
+
+### 节点属性放在哪里
+
+节点属性放在算子构造参数里，例如：
+
+```python
+ATCCompileOp(output_name="model.om", timeout=600)
+```
+
+这类值会编译进 `NodeSpec.attrs` 作为离线默认值。若 testcase 里存在同名 `inputs_by_node.<node>.<attr>`，执行时会覆盖该默认值，作为在线属性生效。
 
 ## 7. 参考
 

@@ -82,7 +82,6 @@ class Pipeline(ABC):
         *,
         required: bool = True,
         description: str = "",
-        expose: bool = True,
         artifact_kind: str | None = None,
         default: object | None = None,
     ) -> PipelineInputRef:
@@ -92,7 +91,6 @@ class Pipeline(ABC):
                 type=type,
                 required=required,
                 description=description,
-                expose=expose,
                 artifact_kind=artifact_kind,
                 default=default,
             )
@@ -112,7 +110,6 @@ class Pipeline(ABC):
         type: str,
         required: bool = True,
         description: str = "",
-        expose: bool = True,
         artifact_kind: str | None = None,
         default: object | None = None,
     ) -> None:
@@ -123,7 +120,6 @@ class Pipeline(ABC):
                 type=type,
                 required=required,
                 description=description,
-                expose=expose,
                 artifact_kind=artifact_kind,
                 default=default,
             )

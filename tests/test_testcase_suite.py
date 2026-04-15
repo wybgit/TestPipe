@@ -34,7 +34,9 @@ class TestCaseSuiteTest(unittest.TestCase):
                 {
                     "case_id": "single_case",
                     "fetchModelNode": {
-                        "resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"},
+                        "repo": "repo_a",
+                        "branch": "main",
+                        "path": "model_a",
                     },
                     "compileModelNode": {
                         "soc_version": "Ascend310P3",
@@ -46,8 +48,8 @@ class TestCaseSuiteTest(unittest.TestCase):
         case = TestCaseLoader().load_data(payload)
         self.assertEqual(case.name, "")
         self.assertEqual(case.variables, {})
-        self.assertEqual(case.inputs["soc_version"], "Ascend310P3")
-        self.assertEqual(case.inputs_by_node["fetchModelNode"]["resource_ref"]["repo"], "repo_a")
+        self.assertEqual(case.inputs, {})
+        self.assertEqual(case.inputs_by_node["fetchModelNode"]["repo"], "repo_a")
         self.assertEqual(case.expected, {})
 
     def test_suite_loads_globals_and_case_overrides(self) -> None:
@@ -60,7 +62,9 @@ class TestCaseSuiteTest(unittest.TestCase):
                     "pipeline": {
                         "name": "OnnxGitAtcPipeline",
                         "fetchModelNode": {
-                            "resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"},
+                            "repo": "repo_a",
+                            "branch": "main",
+                            "path": "model_a",
                         },
                         "compileModelNode": {"soc_version": "Ascend310P3"},
                     },
@@ -69,7 +73,9 @@ class TestCaseSuiteTest(unittest.TestCase):
                         {
                             "case_id": "smoke_suite_override",
                             "fetchModelNode": {
-                                "resource_ref": {"kind": "git_dir", "repo": "repo_b", "subpath": "model_b"},
+                                "repo": "repo_b",
+                                "branch": "main",
+                                "path": "model_b",
                             },
                         },
                     ],
@@ -77,9 +83,9 @@ class TestCaseSuiteTest(unittest.TestCase):
             )
             cases = TestCaseLoader().load_many(case_file)
         self.assertEqual([case.case_id for case in cases], ["smoke_suite_default", "smoke_suite_override"])
-        self.assertEqual(cases[0].inputs["soc_version"], "Ascend310P3")
-        self.assertEqual(cases[0].inputs_by_node["fetchModelNode"]["resource_ref"]["repo"], "repo_a")
-        self.assertEqual(cases[1].inputs_by_node["fetchModelNode"]["resource_ref"]["repo"], "repo_b")
+        self.assertEqual(cases[0].inputs, {})
+        self.assertEqual(cases[0].inputs_by_node["fetchModelNode"]["repo"], "repo_a")
+        self.assertEqual(cases[1].inputs_by_node["fetchModelNode"]["repo"], "repo_b")
         self.assertEqual(cases[0].expected, {})
         self.assertEqual(cases[1].expected, {})
 
@@ -93,7 +99,7 @@ class TestCaseSuiteTest(unittest.TestCase):
             "cases": [
                 {
                     "case_id": "bad_node_mapping",
-                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"}},
+                    "fetchModelNode": {"repo": "repo_a", "branch": "main", "path": "model_a"},
                     "compileModelNode": {"soc_version": "Ascend310P3"},
                     "checkOmExistsNode": {"target_path": "/tmp/override.om"},
                     "missing_node": {"message": "hello"},
@@ -115,12 +121,12 @@ class TestCaseSuiteTest(unittest.TestCase):
             "cases": [
                 {
                     "case_id": "dup_case",
-                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"}},
+                    "fetchModelNode": {"repo": "repo_a", "branch": "main", "path": "model_a"},
                     "compileModelNode": {"soc_version": "Ascend310P3"},
                 },
                 {
                     "case_id": "dup_case",
-                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_b", "subpath": "model_b"}},
+                    "fetchModelNode": {"repo": "repo_b", "branch": "main", "path": "model_b"},
                     "compileModelNode": {"soc_version": "Ascend310P3"},
                 },
             ],
@@ -137,12 +143,12 @@ class TestCaseSuiteTest(unittest.TestCase):
             "cases": [
                 {
                     "case_id": "case_a",
-                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"}},
+                    "fetchModelNode": {"repo": "repo_a", "branch": "main", "path": "model_a"},
                     "compileModelNode": {"soc_version": "Ascend310P3"},
                 },
                 {
                     "case_id": "case_b",
-                    "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_b", "subpath": "model_b"}},
+                    "fetchModelNode": {"repo": "repo_b", "branch": "main", "path": "model_b"},
                     "compileModelNode": {"soc_version": "Ascend310P3"},
                 },
             ],
@@ -179,14 +185,14 @@ class TestCaseSuiteTest(unittest.TestCase):
                             "case_id": "smoke_suite_default",
                             "description": "default suite case",
                             "level": "P1",
-                            "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_a", "subpath": "model_a"}},
+                            "fetchModelNode": {"repo": "repo_a", "branch": "main", "path": "model_a"},
                             "compileModelNode": {"soc_version": "Ascend310P3"},
                         },
                         {
                             "case_id": "smoke_suite_override",
                             "description": "override suite case",
                             "level": "P0",
-                            "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo_b", "subpath": "model_b"}},
+                            "fetchModelNode": {"repo": "repo_b", "branch": "main", "path": "model_b"},
                             "compileModelNode": {"soc_version": "Ascend310P3"},
                         },
                     ],

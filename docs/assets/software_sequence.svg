@@ -65,10 +65,10 @@
 
   <rect x="944" y="446" width="144" height="146" class="engine" />
   <text x="972" y="474" class="label">Node Steps</text>
-  <text x="964" y="504" class="body">7. EnvCheckOp</text>
-  <text x="964" y="528" class="body">8. ResourceFetchOp</text>
-  <text x="964" y="552" class="body">9. ATCCompileOp</text>
-  <text x="964" y="576" class="body">10. PathExistsOp</text>
+  <text x="964" y="504" class="body">7. ResourceFetchOp</text>
+  <text x="964" y="528" class="body">8. ATCCompileOp</text>
+  <text x="964" y="552" class="body">9. PathExistsOp</text>
+  <text x="964" y="576" class="body">10. export results</text>
 
   <path d="M1016 620 H1195" class="msg" />
   <text x="1040" y="611" class="body">11. export DOT/PDF graph</text>

@@ -5,9 +5,9 @@
 TestPipe 当前将一个用例文件统一定义为:
 
 - 绑定一个明确的 `Pipeline`
-- 在文件头部声明该 Pipeline 的通用节点输入
+- 在文件头部声明该 Pipeline 的通用节点参数
 - 在 `cases` 中声明一个或多个具体用例
-- 具体用例只填写差异化输入和用例元信息
+- 具体用例只填写差异化节点参数和用例元信息
 
 这样做的目的:
 
@@ -36,11 +36,11 @@ cases:
 字段说明:
 
 - `pipeline.name`: 必填，目标 Pipeline 名称
-- `pipeline.<NodeName>`: Pipeline 级通用节点输入
+- `pipeline.<NodeName>`: 该节点的通用参数，可同时包含节点输入和属性离线值
 - `cases[*].case_id`: 必填，用例唯一标识
 - `cases[*].description`: 可选，用例说明
 - `cases[*].level`: 可选，用例级别
-- `cases[*].<NodeName>`: 可选，用例级节点输入覆盖
+- `cases[*].<NodeName>`: 可选，用例级节点参数覆盖
 
 ---
 
@@ -49,14 +49,14 @@ cases:
 ### 3.1 顶层约束
 
 - 顶层只保留 `pipeline` 和 `cases`
-- 不再要求用户显式写 `globals`
+- 顶层通用参数直接写在 `pipeline` 段
 - 单个 case 和多 case 文件使用同一格式
 
 ### 3.2 Pipeline 段约束
 
 - `pipeline.name` 必填
 - `pipeline` 下除 `name` 外，其余字段都按节点名解释
-- 节点参数使用 `k-v` 直接赋值，不再嵌套额外包装层
+- 节点参数使用 `k-v` 直接赋值
 
 ### 3.3 Cases 段约束
 
@@ -70,8 +70,11 @@ cases:
 ### 3.4 节点赋值约束
 
 - 节点名必须与 Pipeline 图中的节点名一致
-- 参数名必须与节点输入端口名一致
+- 参数名必须与该节点 `OpSpec.inputs` 或 `OpSpec.attrs` 中定义的名字一致
+- 如果某个字段属于 `inputs`，它表示节点输入
+- 如果某个字段属于 `attrs`，它表示在线属性覆盖
 - 如果某个输入端口已被上游边驱动，不应在用例中再次赋值
+- 已编译进 `NodeSpec.attrs` 的默认属性，可在用例中按同名字段覆盖
 
 ---
 
@@ -82,14 +85,13 @@ cases:
 ```yaml
 pipeline:
   name: OnnxGitAtcPipeline
-  envCheckNode:
-    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
   fetchModelNode:
     repo: https://github.com/wybgit/onnx-layer.git
-    ref: Abs
+    branch: Abs
     path: Abs_testcase_5a6b43
     model_pattern: "*.onnx"
   compileModelNode:
+    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
     soc_version: Ascend310P3
 cases:
   - case_id: onnx_git_atc_case
@@ -117,8 +119,16 @@ cases:
 
 ---
 
-## 5. 兼容性说明
+## 5. 当前推荐格式
 
-- 旧格式 `test_case`、`test_suite`、`testcases` 仍兼容读取
-- 新增文档、示例和真实案例一律以 `pipeline + cases` 为准
-- 用例检查器会继续对节点名、端口名和覆盖行为做契约校验
+- 文档、示例和真实案例统一使用 `pipeline + cases`
+- 用例检查器会对节点名、端口名和覆盖行为做契约校验
+## 6. 当前语义落地
+
+归一化后：
+
+- `CaseSpec.inputs` 只保存真正的 Pipeline 输入
+- `CaseSpec.inputs_by_node` 保存节点参数
+- 节点参数会在执行时按 `OpSpec` 自动拆分为：
+  - 节点输入
+  - 节点属性在线覆盖

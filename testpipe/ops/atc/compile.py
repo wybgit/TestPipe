@@ -18,16 +18,13 @@ class ATCCompileOp(TestOp):
     spec = OpSpec(
         version="1.0",
         description="Compile a model into a local OM artifact",
-        inputs=[
-            PortSpec(name="model_path", type="artifact:path", description="workspace model path"),
-            PortSpec(name="soc_version", type="string", required=False, description="target soc version"),
-            PortSpec(name="atc_options", type="object", required=False, description="extra atc options"),
-            PortSpec(name="env_script", type="string", required=False, description="cann env script"),
-            PortSpec(name="output_name", type="string", required=False, description="output om filename or prefix"),
-        ],
+        inputs=[PortSpec(name="model_path", type="artifact:path", description="workspace model path")],
         outputs=[PortSpec(name="om_path", type="artifact:path", description="compiled om path")],
         attrs=[
             AttrSpec(name="output_name", type="string", required=False, default="compiled_model.om", description="compiled output filename"),
+            AttrSpec(name="soc_version", type="string", required=False, default="Ascend310P3", description="target soc version"),
+            AttrSpec(name="atc_options", type="object", required=False, default=None, description="extra atc options"),
+            AttrSpec(name="env_script", type="string", required=False, default=_DEFAULT_CANN_ENV_SCRIPT, description="cann env script"),
             AttrSpec(name="timeout", type="int", required=False, default=30, description="command timeout"),
             AttrSpec(name="framework", type="int", required=False, default=5, description="atc framework id"),
         ],
@@ -38,14 +35,14 @@ class ATCCompileOp(TestOp):
         if not source.exists():
             raise RuntimeError(f"model not found: {source}")
 
-        output_name = str(step_context.inputs.get("output_name", step_context.attrs.get("output_name", "compiled_model.om")))
+        output_name = str(step_context.attrs.get("output_name", "compiled_model.om"))
         timeout = step_context.attrs.get("timeout", 30)
-        soc_version = step_context.inputs.get("soc_version")
+        soc_version = step_context.attrs.get("soc_version")
         if soc_version in {None, ""}:
             destination = Path(step_context.step_dir) / output_name
             step_context.host.exec(["cp", str(source), str(destination)], timeout=timeout)
         else:
-            env_script = str(step_context.inputs.get("env_script", _DEFAULT_CANN_ENV_SCRIPT))
+            env_script = str(step_context.attrs.get("env_script", _DEFAULT_CANN_ENV_SCRIPT))
             if not Path(env_script).expanduser().exists():
                 raise RuntimeError(f"cann env script not found: {env_script}")
             output_prefix = self._output_prefix(Path(step_context.step_dir), output_name)
@@ -54,7 +51,7 @@ class ATCCompileOp(TestOp):
                 output_prefix=output_prefix,
                 framework=int(step_context.attrs.get("framework", 5)),
                 soc_version=str(soc_version),
-                atc_options=step_context.inputs.get("atc_options"),
+                atc_options=step_context.attrs.get("atc_options"),
             )
             command = f"source {shlex.quote(env_script)} && {' '.join(shlex.quote(part) for part in compile_command)}"
             step_context.host.exec(["bash", "-lc", command], timeout=timeout)

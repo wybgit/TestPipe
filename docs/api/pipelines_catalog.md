@@ -14,38 +14,25 @@ Fetch an ONNX model from git resources and compile it into OM through ATC.
 
 ### Inputs
 
-| Name | Type | Required | Expose | Default | Description |
-| --- | --- | --- | --- | --- | --- |
-| soc_version | string | yes | yes | - | target soc version |
-| atc_options | object | no | yes | - | extra atc options |
-| output_name | string | no | yes | - | output om file name |
+| Name | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| - | - | - | - | 无 |
 
 ### Outputs
 
-| Name | Type | Required | Expose | Default | Description |
-| --- | --- | --- | --- | --- | --- |
-| model_path | artifact:path | yes | yes | - | resolved onnx model path |
-| om_path | artifact:path | yes | yes | - | compiled om artifact |
-| path_exists | bool | yes | yes | - | compiled om existence |
+| Name | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| model_path | artifact:path | yes | - | resolved onnx model path |
+| om_path | artifact:path | yes | - | compiled om artifact |
+| path_exists | bool | yes | - | compiled om existence |
 
 ### Nodes
-
-#### envCheckNode
-
-- `op_name`: `EnvCheck`
-- `stage`: `prepare`
-- `attrs`: `-`
-
-输入绑定：
-
-- 无
-
 
 #### fetchModelNode
 
 - `op_name`: `ResourceFetch`
 - `stage`: `prepare`
-- `attrs`: `-`
+- `attrs`: `{"model_pattern": "*.onnx"}`
 
 输入绑定：
 
@@ -56,15 +43,11 @@ Fetch an ONNX model from git resources and compile it into OM through ATC.
 
 - `op_name`: `ATCCompile`
 - `stage`: `compile`
-- `attrs`: `{"framework": 5, "output_name": "model.om", "timeout": 600}`
+- `attrs`: `{"env_script": "/home/wyb/Ascend/cann-8.5.0/set_env.sh", "framework": 5, "output_name": "model.om", "soc_version": "Ascend310P3", "timeout": 600}`
 
 输入绑定：
 
 - `model_path` <- `fetchModelNode.model_path`
-- `soc_version` <- `pipeline.soc_version`
-- `atc_options` <- `pipeline.atc_options`
-- `output_name` <- `pipeline.output_name`
-- `env_script` <- `envCheckNode.env_script`
 
 
 #### checkOmExistsNode

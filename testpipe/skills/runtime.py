@@ -53,7 +53,6 @@ def _normalize_port(raw: Any, *, default_type: str = "string") -> dict[str, Any]
             "type": raw.get("type", default_type),
             "description": raw.get("description", ""),
             "required": raw.get("required", True),
-            "expose": raw.get("expose", True),
         }
     raise ValueError(f"unsupported port definition: {raw!r}")
 
@@ -167,7 +166,6 @@ def _dict_to_port_specs(raw_ports: list[Any]) -> list[PortSpec]:
             type=item.get("type", "string"),
             required=item.get("required", True),
             description=item.get("description", ""),
-            expose=item.get("expose", True),
         )
         for item in raw_ports
     ]

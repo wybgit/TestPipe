@@ -76,19 +76,17 @@ class LLMAssetRegistryTest(unittest.TestCase):
                 "cases": [
                     {
                         "case_id": "onnx_case",
-                        "fetchModelNode": {"resource_ref": {"kind": "git_dir", "repo": "repo", "subpath": "model"}},
+                        "fetchModelNode": {"repo": "repo", "path": "model"},
                         "compileModelNode": {"soc_version": "Ascend310P3"},
                     }
                 ],
             }
         )
-        case.inputs.pop("soc_version")
-        case.inputs_by_node["compileModelNode"].pop("soc_version")
         pipeline_spec = PipelineCompiler().compile(create_pipeline(case.pipeline))
 
         report = CaseChecker().check(case, pipeline_spec)
         self.assertEqual(report.status, "fail")
-        self.assertEqual(report.issues[0].field, "inputs.soc_version")
+        self.assertEqual(report.issues[0].field, "inputs_by_node.fetchModelNode.branch")
 
     def test_check_case_cli_returns_structured_failure(self) -> None:
         bootstrap()
@@ -98,6 +96,10 @@ class LLMAssetRegistryTest(unittest.TestCase):
                 "name": "BadCase",
                 "pipeline": "OnnxGitAtcPipeline",
                 "inputs": {},
+                "inputs_by_node": {
+                    "fetchModelNode": {"repo": "repo", "branch": "main", "path": "model"},
+                    "compileModelNode": {"soc_version": "Ascend310P3"},
+                },
                 "expected": {"unknown_output": True},
             }
         }
@@ -111,7 +113,7 @@ class LLMAssetRegistryTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 2)
         self.assertIn('"status": "fail"', stdout.getvalue())
-        self.assertIn('"field": "inputs.soc_version"', stdout.getvalue())
+        self.assertIn('"field": "expected.unknown_output"', stdout.getvalue())
 
 
 if __name__ == "__main__":

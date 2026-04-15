@@ -9,8 +9,6 @@
 - `.dot`
 - `.pdf`，默认在本机存在 `dot` 命令时自动生成
 
-不再维护旧设计中的 ONNX 导图能力。
-
 ## 2. 导出入口
 
 ### 2.1 执行 testcase 时自动导出
@@ -58,33 +56,37 @@ testpipe export-pipeline-graph examples/testcases/onnx_git_atc.yaml --output-dir
 - 节点内过长路径会按固定宽度自动换行，避免节点被路径撑得过宽。
 - `input/output` 不做复杂包裹，尽量保持和参考图一致的简洁风格。
 
-## 4. 输入展示策略
+## 4. 输入与属性展示策略
 
-当前图里有两类输入来源：
+当前图里会区分三类信息：
 
 ### 4.1 Pipeline 输入
 
 如果某个参数通过 `add_input()` 挂在 Pipeline 上，并且 testcase 给了值，就会显示成单独的输入节点。
 
-例如：
+这类值必须是真正参与图绑定流转的输入。
 
-- `soc_version`
-- `atc_options`
-- `output_name`
+### 4.2 节点直输输入
 
-### 4.2 节点直输参数
-
-如果某个参数没有提升成 Pipeline 输入，而是直接写在 testcase 的节点配置下，就会显示为该节点专属输入块。
+如果某个值属于节点输入，但没有提升成 Pipeline 输入，而是直接写在 testcase 的节点配置下，就会显示为该节点专属输入块。
 
 例如 `OnnxGitAtcPipeline` 中的：
 
-- `envCheckNode.env_script`
 - `fetchModelNode.repo`
-- `fetchModelNode.ref`
+- `fetchModelNode.branch`
 - `fetchModelNode.path`
-- `fetchModelNode.model_pattern`
 
-这也是当前推荐方式：只被单个节点消费的参数，不必强行提升成 Pipeline 输入。
+### 4.3 节点属性
+
+如果某个值属于节点属性，无论来自 Pipeline 构造时的离线默认值，还是 testcase 中的在线覆盖值，都会显示在节点主体的 `attrs` 区域。
+
+例如：
+
+- `fetchModelNode.model_pattern`
+- `compileModelNode.soc_version`
+- `compileModelNode.env_script`
+- `compileModelNode.atc_options`
+- `compileModelNode.output_name`
 
 ## 5. 导图内容来源
 
@@ -100,14 +102,12 @@ testpipe export-pipeline-graph examples/testcases/onnx_git_atc.yaml --output-dir
 
 `OnnxGitAtcPipeline` 导图时会表现为：
 
-1. `envCheckNode` 接受 `env_script`
-2. `fetchModelNode` 接受 Git 资源参数
-3. `compileModelNode` 接收：
-   - 来自 `fetchModelNode` 的 `model_path`
-   - 来自 Pipeline 的 `soc_version / atc_options / output_name`
-   - 来自 `envCheckNode` 的 `env_script`
-4. `checkOmExistsNode` 接收 `compileModelNode.om_path`
-5. 输出 `model_path / om_path / path_exists`
+1. `fetchModelNode` 接受 Git 资源输入 `repo / branch / path`
+2. `fetchModelNode` 在节点属性区展示 `model_pattern`
+3. `compileModelNode` 接收来自 `fetchModelNode` 的 `model_path`
+4. `compileModelNode` 在节点属性区展示 `soc_version / env_script / atc_options / output_name / timeout / framework`
+5. `checkOmExistsNode` 接收 `compileModelNode.om_path`
+6. 输出 `model_path / om_path / path_exists`
 
 ## 7. 相关源码
 

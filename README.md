@@ -45,13 +45,18 @@ testpipe run examples/testcases/onnx_git_atc.yaml
 
 默认会直接使用仓库根目录 `testpipe.config.yaml` 中的默认环境，也就是当前宿主机本地环境。
 
-该样例会走 `EnvCheck -> ResourceFetch(git_dir) -> ATCCompile -> PathExists`，其中 `ATCCompile` 会先通过 `EnvCheckNode` 校验并接收:
+该样例会走 `ResourceFetch(git_dir) -> ATCCompile -> PathExists`。其中：
+
+- `ResourceFetch` 只接收 `repo / branch / path` 作为输入，`model_pattern` 作为属性，输出匹配到的模型文件路径。
+- `ATCCompile` 只接收 `model_path` 作为输入，`soc_version / env_script / atc_options / output_name` 都作为属性，支持默认离线值和用例在线覆盖。
+
+`ATCCompile` 会先执行:
 
 ```bash
 source /home/wyb/Ascend/cann-8.5.0/set_env.sh
 ```
 
-随后调用 `atc` 完成 ONNX 到 OM 的真实转换，默认核心命令形态为:
+随后调用 `atc` 完成 ONNX 到 OM 的真实转换，核心命令形态为:
 
 ```bash
 atc --model=./Abs_testcase_5a6b43.onnx --framework=5 --output=Abs_testcase_5a6b43 --soc_version=Ascend310P3
@@ -196,14 +201,13 @@ runs/
 ```yaml
 pipeline:
   name: OnnxGitAtcPipeline
-  envCheckNode:
-    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
   fetchModelNode:
     repo: https://github.com/wybgit/onnx-layer.git
-    ref: Abs
+    branch: Abs
     path: Abs_testcase_5a6b43
     model_pattern: "*.onnx"
   compileModelNode:
+    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
     soc_version: Ascend310P3
 cases:
   - case_id: onnx_git_atc_case
@@ -296,9 +300,9 @@ testpipe run-skill pipeline-generator /path/to/pipeline-input.yaml --json
 - `DeviceExecutor` / `TransferExecutor` 的 mock 模式
 - SSH/SFTP 命令构建、远端根目录约束、远端目录预创建
 - `transfer.put / transfer.get / device.exec` trace 记录
-- `ResourceFetch` 主线支持本地路径与 Git 仓目录资源
+- `ResourceFetch` 主线支持 Git 仓目录资源
 - `ATCCompile` 主线支持真实 `atc` 执行与 `extra atc options`
-- 当前内置主线算子保留 `EnvCheck / ResourceFetch / ATCCompile / PathExists`
+- 当前内置主线算子保留 `ResourceFetch / ATCCompile / PathExists`
 
 当前尚未完整接入:
 

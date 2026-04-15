@@ -20,7 +20,9 @@ TestPipe 当前采用统一的 Python DSL + `PipelineSpec` 执行模型。
 
 - `testpipe/core/pipeline.py` 是 Pipeline DSL 的唯一实现。
 - Pipeline 通过 `define()` 构图，核心 API 是 `add_input`、`add_node`、`add_output`。
-- Node 输入来源统一分为 Pipeline 输入或上游节点输出，不再维护额外的 `op_type`/`category` 业务字段。
+- Node 输入来源统一分为 Pipeline 输入或上游节点输出。
+- 算子属性与节点输入明确分离：`inputs` 表示图上流转的值，`attrs` 表示算子默认值，可在 testcase 中按节点做在线覆盖。
+- `CaseSpec.inputs` 只承载 Pipeline 输入，`CaseSpec.inputs_by_node` 用于节点输入补充和属性在线覆盖。
 - 当前示例保留的主流程是 `OnnxGitAtcPipeline`。
 - Pipeline 执行和显式导出都支持生成 `.dot` 与 `.pdf` 图。
 

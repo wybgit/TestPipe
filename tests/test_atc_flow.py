@@ -129,11 +129,10 @@ class AtcMainlineFlowTest(unittest.TestCase):
                 node_name="fetchModelNode",
                 inputs={
                     "repo": repo_dir,
-                    "ref": "Abs",
+                    "branch": "Abs",
                     "path": "Abs_testcase_5a6b43",
-                    "model_pattern": "*.onnx",
                 },
-                attrs={},
+                attrs={"model_pattern": "*.onnx"},
             )
             outputs = ResourceFetchOp().execute(context)
             self.assertTrue(Path(outputs["model_path"]).exists())
@@ -153,19 +152,18 @@ class AtcMainlineFlowTest(unittest.TestCase):
                 node_name="fetchModelNode",
                 inputs={
                     "repo": "https://github.com/wybgit/onnx-layer.git",
-                    "ref": "Abs",
+                    "branch": "Abs",
                     "path": "Abs_testcase_5a6b43",
-                    "model_pattern": "*.onnx",
                 },
-                attrs={},
+                attrs={"model_pattern": "*.onnx"},
             )
 
             def fake_git_fetch(*args, **kwargs):
                 raise RuntimeError("simulated git transport failure")
 
-            def fake_archive_fetch(step_context, *, repo, subpath, git_ref, target_root, cause):
+            def fake_archive_fetch(step_context, *, repo, subpath, branch, target_root, cause):
                 self.assertEqual(repo, "https://github.com/wybgit/onnx-layer.git")
-                self.assertEqual(git_ref, "Abs")
+                self.assertEqual(branch, "Abs")
                 self.assertEqual(subpath, "Abs_testcase_5a6b43")
                 materialized_path = ResourceFetchOp()._materialize_local_resource(archive_root / subpath, target_root)  # noqa: SLF001
                 return materialized_path, "archive_commit"
@@ -191,6 +189,8 @@ class AtcMainlineFlowTest(unittest.TestCase):
                 node_name="compileModelNode",
                 inputs={
                     "model_path": str(model_path),
+                },
+                attrs={
                     "soc_version": "Ascend310P3",
                     "env_script": env_script,
                     "output_name": "custom_model.om",
@@ -199,10 +199,17 @@ class AtcMainlineFlowTest(unittest.TestCase):
                         "input_format": "NCHW",
                         "args_file": str(args_log),
                     },
+                    "timeout": 30,
+                    "framework": 5,
                 },
-                attrs={"output_name": "model.om", "timeout": 30, "framework": 5},
             )
-            outputs = ATCCompileOp(output_name="model.om", timeout=30, framework=5).execute(context)
+            outputs = ATCCompileOp(
+                output_name="model.om",
+                timeout=30,
+                framework=5,
+                soc_version="Ascend310P3",
+                env_script=env_script,
+            ).execute(context)
             self.assertTrue(Path(outputs["om_path"]).exists())
             logged_args = args_log.read_text(encoding="utf-8")
             self.assertIn("--precision_mode=allow_fp32_to_fp16", logged_args)
@@ -257,16 +264,14 @@ class AtcMainlineFlowTest(unittest.TestCase):
                 pipeline="OnnxGitAtcPipeline",
                 inputs={},
                 inputs_by_node={
-                    "envCheckNode": {
-                        "env_script": env_script,
-                    },
                     "fetchModelNode": {
                         "repo": repo_dir,
-                        "ref": "Abs",
+                        "branch": "Abs",
                         "path": "Abs_testcase_5a6b43",
                         "model_pattern": "*.onnx",
                     },
                     "compileModelNode": {
+                        "env_script": env_script,
                         "soc_version": "Ascend310P3",
                         "output_name": "abs_model.om",
                         "atc_options": {"precision_mode": "allow_fp32_to_fp16"},

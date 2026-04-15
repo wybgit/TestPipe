@@ -66,7 +66,6 @@ def add_input(
     *,
     required: bool = True,
     description: str = "",
-    expose: bool = True,
     artifact_kind: str | None = None,
     default: object | None = None,
 ) -> PipelineInputRef:
@@ -80,8 +79,8 @@ def add_input(
 示例：
 
 ```python
-soc_version = self.add_input("soc_version", "string", description="target soc version")
-output_name = self.add_input("output_name", "string", required=False, description="output om file name")
+target_device = self.add_input("target_device", "string", description="target device name")
+timeout_budget = self.add_input("timeout_budget", "int", required=False, description="pipeline-level timeout budget")
 ```
 
 ### 3.3 `input_ref()`
@@ -106,7 +105,6 @@ def add_output(
     type: str,
     required: bool = True,
     description: str = "",
-    expose: bool = True,
     artifact_kind: str | None = None,
     default: object | None = None,
 ) -> None:
@@ -143,7 +141,7 @@ def set_stage(self, stage_name: str | None) -> None:
 
 ```python
 self.set_stage("prepare")
-self.add_node("envCheckNode", EnvCheckOp())
+self.add_node("fetchModelNode", ResourceFetchOp())
 ```
 
 ### 3.6 `add_node()`
@@ -169,13 +167,13 @@ def add_node(
 输入绑定支持两种写法：
 
 ```python
-self.add_node("compileModelNode", ATCCompileOp(), inputs={"soc_version": soc_version})
+self.add_node("compileModelNode", ATCCompileOp(), inputs={"model_path": fetch_model.output("model_path")})
 ```
 
 或
 
 ```python
-self.add_node("compileModelNode", ATCCompileOp(), soc_version=soc_version)
+self.add_node("checkOmExistsNode", PathExistsOp(), target_path=compile_model.output("om_path"))
 ```
 
 `stage` 优先级：
@@ -205,7 +203,7 @@ def connect(self, source: str, target: str) -> None:
 
 ```python
 self.connect("fetchModelNode.model_path", "compileModelNode.model_path")
-self.connect("soc_version", "compileModelNode.soc_version")
+self.connect("pipeline_input_name", "someNode.some_input")
 ```
 
 说明：
@@ -213,6 +211,7 @@ self.connect("soc_version", "compileModelNode.soc_version")
 - `source` 没有 `.` 时按 Pipeline 输入解释。
 - `source` 有 `.` 时按节点输出解释。
 - `target` 必须是 `node.port` 形式。
+- `connect()` 只适用于节点输入绑定，不用于节点属性赋值。
 
 当前更推荐直接用 `add_node(..., inputs=...)` 写串行代码，只有需要补充连接时再使用 `connect()`。
 
@@ -220,26 +219,19 @@ self.connect("soc_version", "compileModelNode.soc_version")
 
 ### 4.1 先声明真正需要提升到 Pipeline 级别的输入
 
-```python
-soc_version = self.add_input("soc_version", "string")
-```
+只有“确实要作为图输入流转”的参数才需要 `add_input()`。如果只是某个节点的属性默认值或在线覆盖值，直接放到节点属性里更合适。
 
 ### 4.2 再按执行顺序添加节点
 
 ```python
 self.set_stage("prepare")
-env_check = self.add_node("envCheckNode", EnvCheckOp())
 fetch_model = self.add_node("fetchModelNode", ResourceFetchOp())
 
 self.set_stage("compile")
 compile_model = self.add_node(
     "compileModelNode",
     ATCCompileOp(output_name="model.om", timeout=600),
-    inputs={
-        "model_path": fetch_model.output("model_path"),
-        "soc_version": soc_version,
-        "env_script": env_check.output("env_script"),
-    },
+    inputs={"model_path": fetch_model.output("model_path")},
 )
 ```
 
@@ -249,6 +241,19 @@ compile_model = self.add_node(
 self.add_output("om_path", compile_model.output("om_path"), type="artifact:path")
 ```
 
+### 4.4 区分输入和属性
+
+推荐按下面的规则判断：
+
+- `input`：来自 Pipeline 输入或上游节点输出，并且会在图结构里形成绑定关系。
+- `attr`：算子默认行为或默认参数，通常在构造节点时给出离线值，也可以由 testcase 在 `inputs_by_node.<node>` 下做在线覆盖。
+
+因此：
+
+- 不要把节点属性误写成 Pipeline 输入。
+- 不要试图用 `connect()` 或 `add_input()` 去绑定节点属性。
+- `inputs_by_node` 允许同时写节点输入值和属性覆盖值，执行层会按 `OpSpec` 自动分流。
+
 ## 5. 完整示例
 
 下面是当前保留示例 `OnnxGitAtcPipeline` 的简化写法：
@@ -257,25 +262,14 @@ self.add_output("om_path", compile_model.output("om_path"), type="artifact:path"
 @register_pipeline
 class OnnxGitAtcPipeline(Pipeline):
     def define(self) -> None:
-        soc_version = self.add_input("soc_version", "string")
-        atc_options = self.add_input("atc_options", "object", required=False)
-        output_name = self.add_input("output_name", "string", required=False)
-
         self.set_stage("prepare")
-        env_check = self.add_node("envCheckNode", EnvCheckOp())
         fetch_model = self.add_node("fetchModelNode", ResourceFetchOp())
 
         self.set_stage("compile")
         compile_model = self.add_node(
             "compileModelNode",
             ATCCompileOp(output_name="model.om", timeout=600),
-            inputs={
-                "model_path": fetch_model.output("model_path"),
-                "soc_version": soc_version,
-                "atc_options": atc_options,
-                "output_name": output_name,
-                "env_script": env_check.output("env_script"),
-            },
+            inputs={"model_path": fetch_model.output("model_path")},
         )
 
         check_om = self.add_node(
@@ -291,8 +285,9 @@ class OnnxGitAtcPipeline(Pipeline):
 
 这里的关键约束是：
 
-- `fetchModelNode` 的 `repo / ref / path / model_pattern` 只服务于当前节点，因此直接作为节点输入由 testcase 注入，不再提升成 Pipeline 输入。
-- `soc_version / atc_options / output_name` 会被 `compileModelNode` 消费，且属于流程级参数，因此保留为 Pipeline 输入。
+- `fetchModelNode` 的输入只有 `repo / branch / path`，`model_pattern` 是节点属性。
+- `compileModelNode` 的输入只有 `model_path`，`soc_version / env_script / atc_options / output_name` 都是节点属性。
+- 这些属性既可以在 Pipeline 里给离线默认值，也可以在 testcase 的节点参数中做在线覆盖。
 
 ## 6. 编译结果
 
