@@ -1,210 +1,123 @@
-# 特性05: Pipeline可视化导出
+# Pipeline 可视化导出
 
-**阶段**: Phase 1 (MVP)  
-**优先级**: P1  
-**预计工作量**: 2天  
-**依赖**: 特性03 (Pipeline JSON规范)
+本文档描述当前 TestPipe 已经实现的 Pipeline 图导出能力。
 
----
+## 1. 当前支持范围
 
-## 1. 需求描述
+当前框架只支持基于 `PipelineSpec + CaseSpec` 导出：
 
-### 1.1 业务需求
+- `.dot`
+- `.pdf`，默认在本机存在 `dot` 命令时自动生成
 
-Pipeline需要支持可视化,方便用户理解测试流程:
-- **导出ONNX模型** - 可以用Netron查看
-- **导出DOT图** - 可以用Graphviz渲染
-- 自动分析节点依赖关系,生成有向图
+不再维护旧设计中的 ONNX 导图能力。
 
----
+## 2. 导出入口
 
-## 2. 导出格式
+### 2.1 执行 testcase 时自动导出
 
-### 2.1 ONNX导出
+执行 `testpipe run ...` 后，每个 run 目录默认会产出：
 
-将Pipeline转换为ONNX模型:
-- 每个测试算子 → ONNX算子节点
-- 数据流 → ONNX边
-- 可以用Netron可视化
+- `pipeline_graph.dot`
+- `pipeline_graph.pdf`
 
-### 2.2 DOT图导出
+示例：
 
-将Pipeline转换为Graphviz DOT格式:
-- 每个测试算子 → DOT节点
-- 数据流 → DOT边
-- 可以用Graphviz渲染为PNG/SVG
-
----
-
-## 3. ONNX导出器实现
-
-```python
-import onnx
-from onnx import helper, TensorProto
-from testpipe.core import Pipeline
-
-class ONNXExporter:
-    """ONNX导出器"""
-    
-    def export(self, pipeline: Pipeline, output_path: str):
-        """
-        导出Pipeline为ONNX模型
-        
-        Args:
-            pipeline: Pipeline实例
-            output_path: 输出ONNX文件路径
-        """
-        nodes = []
-        inputs = []
-        outputs = []
-        
-        # 创建ONNX节点
-        for node in pipeline.nodes.values():
-            onnx_node = helper.make_node(
-                op_type=node.op_type,
-                inputs=node.inputs,
-                outputs=node.outputs,
-                name=node.name,
-                **node.attributes
-            )
-            nodes.append(onnx_node)
-        
-        # 创建Pipeline输入
-        for inp_name in pipeline.pipeline_inputs:
-            inp = helper.make_tensor_value_info(
-                inp_name,
-                TensorProto.UNDEFINED,
-                []
-            )
-            inputs.append(inp)
-        
-        # 创建Pipeline输出
-        for out_name in pipeline.pipeline_outputs:
-            out = helper.make_tensor_value_info(
-                out_name,
-                TensorProto.UNDEFINED,
-                []
-            )
-            outputs.append(out)
-        
-        # 创建图
-        graph = helper.make_graph(
-            nodes=nodes,
-            name=pipeline.name,
-            inputs=inputs,
-            outputs=outputs
-        )
-        
-        # 创建模型
-        model = helper.make_model(
-            graph,
-            producer_name='TestPipe',
-            opset_imports=[helper.make_opsetid("", 13)]
-        )
-        
-        # 保存
-        onnx.save(model, output_path)
-        print(f"✓ ONNX模型已导出: {output_path}")
+```text
+runs/
+  onnx_git_atc_case_YYYYMMDD_HHMMSS/
+    pipeline_graph.dot
+    pipeline_graph.pdf
+    summary.json
+    steps/
 ```
 
----
+### 2.2 手动导出
 
-## 4. DOT导出器实现
-
-```python
-from testpipe.core import Pipeline
-
-class DOTExporter:
-    """DOT图导出器"""
-    
-    def export(self, pipeline: Pipeline, output_path: str):
-        """
-        导出Pipeline为DOT图
-        
-        Args:
-            pipeline: Pipeline实例
-            output_path: 输出DOT文件路径
-        """
-        lines = []
-        lines.append(f'digraph "{pipeline.name}" {{')
-        lines.append('  rankdir=TB;')
-        lines.append('  node [shape=box, style=rounded];')
-        lines.append('')
-        
-        # 添加节点
-        for node in pipeline.nodes.values():
-            label = f"{node.name}\\n({node.op_type})"
-            lines.append(f'  "{node.name}" [label="{label}"];')
-        
-        lines.append('')
-        
-        # 添加边
-        for node in pipeline.nodes.values():
-            for input_name in node.inputs:
-                # 找到生产这个输入的节点
-                for producer in pipeline.nodes.values():
-                    if input_name in producer.outputs:
-                        lines.append(f'  "{producer.name}" -> "{node.name}" [label="{input_name}"];')
-        
-        lines.append('}')
-        
-        # 保存
-        with open(output_path, 'w') as f:
-            f.write('\n'.join(lines))
-        
-        print(f"✓ DOT图已导出: {output_path}")
-        print(f"  使用以下命令渲染:")
-        print(f"  dot -Tpng {output_path} -o {output_path}.png")
-```
-
----
-
-## 5. CLI命令
+也可以直接使用 CLI：
 
 ```bash
-# 导出ONNX
-testpipe export pipeline.json --format onnx --output pipeline.onnx
-
-# 导出DOT
-testpipe export pipeline.json --format dot --output pipeline.dot
-
-# 导出并渲染DOT
-testpipe export pipeline.json --format dot --output pipeline.dot --render
+testpipe export-pipeline-graph examples/testcases/onnx_git_atc.yaml --output-dir exports --json
 ```
 
----
+返回结果会包含：
 
-## 6. 使用示例
+- `dot_path`
+- `pdf_path`
 
-```python
-from testpipe.loaders import PipelineLoader
-from testpipe.exporters import ONNXExporter, DOTExporter
+对应实现位于 [exporter.py](/home/wyb/AscendCode/TestPipe/testpipe/graph/exporter.py)。
 
-# 加载Pipeline
-loader = PipelineLoader()
-pipeline = loader.load("pipelines/atc_e2e.json")
+## 3. 当前导图规则
 
-# 导出ONNX
-onnx_exporter = ONNXExporter()
-onnx_exporter.export(pipeline, "pipeline.onnx")
+图导出遵循下面的展示原则：
 
-# 导出DOT
-dot_exporter = DOTExporter()
-dot_exporter.export(pipeline, "pipeline.dot")
-```
+- 流向固定为从上到下，即 `rankdir=TB`。
+- 输入、节点、输出分别使用不同配色。
+- 节点主体显示：节点名、算子名、以及 IBO 信息。
+- 输入参数直接显示在图里，便于复盘实际执行值。
+- 只显示真正有值的可选输入；可选输入未传时不出现在图上。
+- 节点内过长路径会按固定宽度自动换行，避免节点被路径撑得过宽。
+- `input/output` 不做复杂包裹，尽量保持和参考图一致的简洁风格。
 
----
+## 4. 输入展示策略
 
-## 7. 验收标准
+当前图里有两类输入来源：
 
-- [ ] 支持导出ONNX模型
-- [ ] 支持导出DOT图
-- [ ] ONNX可以用Netron查看
-- [ ] DOT可以用Graphviz渲染
-- [ ] CLI命令工作正常
+### 4.1 Pipeline 输入
 
----
+如果某个参数通过 `add_input()` 挂在 Pipeline 上，并且 testcase 给了值，就会显示成单独的输入节点。
 
-**文档版本**: v2.0  
-**创建日期**: 2026-04-11  
-**负责人**: TestPipe核心团队
+例如：
+
+- `soc_version`
+- `atc_options`
+- `output_name`
+
+### 4.2 节点直输参数
+
+如果某个参数没有提升成 Pipeline 输入，而是直接写在 testcase 的节点配置下，就会显示为该节点专属输入块。
+
+例如 `OnnxGitAtcPipeline` 中的：
+
+- `envCheckNode.env_script`
+- `fetchModelNode.repo`
+- `fetchModelNode.ref`
+- `fetchModelNode.path`
+- `fetchModelNode.model_pattern`
+
+这也是当前推荐方式：只被单个节点消费的参数，不必强行提升成 Pipeline 输入。
+
+## 5. 导图内容来源
+
+导图不是直接读 Python 代码，而是综合下面三部分构建：
+
+1. `PipelineSpec`
+2. `CaseSpec`
+3. 节点执行输出和 pipeline 最终输出
+
+因此导出的图既能表达静态结构，也能把 testcase 中的真实输入和运行结果填进去。
+
+## 6. OnnxGitAtcPipeline 的当前图逻辑
+
+`OnnxGitAtcPipeline` 导图时会表现为：
+
+1. `envCheckNode` 接受 `env_script`
+2. `fetchModelNode` 接受 Git 资源参数
+3. `compileModelNode` 接收：
+   - 来自 `fetchModelNode` 的 `model_path`
+   - 来自 Pipeline 的 `soc_version / atc_options / output_name`
+   - 来自 `envCheckNode` 的 `env_script`
+4. `checkOmExistsNode` 接收 `compileModelNode.om_path`
+5. 输出 `model_path / om_path / path_exists`
+
+## 7. 相关源码
+
+- [graph/exporter.py](/home/wyb/AscendCode/TestPipe/testpipe/graph/exporter.py)
+- [test_engine.py](/home/wyb/AscendCode/TestPipe/testpipe/engine/test_engine.py)
+- [compile.py](/home/wyb/AscendCode/TestPipe/testpipe/pipelines/atc/compile.py)
+
+## 8. 相关文档
+
+- [总体设计](00_总体设计.md)
+- [Pipeline Python 实现](03_Pipeline_Python实现.md)
+- [框架架构图](06_框架架构图.md)
+- [软件时序调用图](09_软件时序调用图.md)

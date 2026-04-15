@@ -603,6 +603,12 @@ class SkillRunner:
             "result_locations": result_locations,
             "summary": summary,
             "summaries": summaries,
+            "graph_files": None
+            if result_location is None
+            else {
+                "dot_path": str(Path(result_location) / "pipeline_graph.dot"),
+                "pdf_path": str(Path(result_location) / "pipeline_graph.pdf"),
+            },
             "execution_console_log": execution_console_log,
         }
 

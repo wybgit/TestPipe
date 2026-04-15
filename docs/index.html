@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TestPipe Docs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css" />
+    <style>
+      :root {
+        --tp-bg: #ffffff;
+        --tp-bg-soft: #f8fafc;
+        --tp-bg-sidebar: #fbfcfe;
+        --tp-border: #e2e8f0;
+        --tp-border-strong: #cbd5e1;
+        --tp-text: #0f172a;
+        --tp-text-soft: #475569;
+        --tp-heading: #0b1220;
+        --tp-accent: #2563eb;
+        --tp-accent-soft: rgba(37, 99, 235, 0.08);
+        --tp-code-bg: #f8fafc;
+        --tp-code-text: #0f172a;
+        --tp-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        color: var(--tp-text);
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        font-size: 16px;
+        line-height: 1.7;
+      }
+
+      .app-name-link,
+      .sidebar ul li a,
+      .markdown-section a {
+        transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+      }
+
+      .sidebar {
+        background: var(--tp-bg-sidebar);
+        border-right: 1px solid var(--tp-border);
+        box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.06);
+        padding-top: 16px;
+      }
+
+      .app-name {
+        padding: 12px 20px 20px;
+        border-bottom: 1px solid var(--tp-border);
+        margin-bottom: 8px;
+      }
+
+      .app-name-link {
+        color: var(--tp-heading);
+        font-size: 1.35rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+
+      .app-name-link:hover {
+        color: var(--tp-accent);
+      }
+
+      .sidebar-nav {
+        padding: 12px 14px 24px;
+      }
+
+      .sidebar ul {
+        margin: 0;
+        padding-left: 0;
+      }
+
+      .sidebar-nav > ul > li {
+        margin: 0 0 12px;
+      }
+
+      .sidebar-nav > ul > li > a {
+        display: block;
+        color: var(--tp-heading);
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin: 16px 8px 8px;
+        pointer-events: none;
+      }
+
+      .sidebar ul li ul {
+        margin-top: 6px;
+      }
+
+      .sidebar ul li ul li {
+        list-style: none;
+        margin: 2px 0;
+      }
+
+      .sidebar ul li ul li a,
+      .sidebar-nav > ul > li:first-child > a {
+        display: block;
+        color: var(--tp-text-soft);
+        font-size: 0.95rem;
+        font-weight: 500;
+        border-radius: 10px;
+        padding: 8px 12px;
+        margin: 0 6px;
+      }
+
+      .sidebar-nav > ul > li:first-child > a {
+        pointer-events: auto;
+        text-transform: none;
+        letter-spacing: 0;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--tp-text-soft);
+      }
+
+      .sidebar ul li a:hover,
+      .sidebar ul li.active > a {
+        color: var(--tp-accent);
+        background: var(--tp-accent-soft);
+      }
+
+      .sidebar ul li.active > a {
+        font-weight: 700;
+      }
+
+      .content {
+        background: transparent;
+      }
+
+      .markdown-section {
+        max-width: 960px;
+        padding: 48px 56px 96px;
+        color: var(--tp-text);
+      }
+
+      .markdown-section > *:first-child {
+        margin-top: 0;
+      }
+
+      .markdown-section h1,
+      .markdown-section h2,
+      .markdown-section h3,
+      .markdown-section h4 {
+        color: var(--tp-heading);
+        letter-spacing: -0.02em;
+      }
+
+      .markdown-section h1 {
+        font-size: 2.35rem;
+        font-weight: 800;
+        margin: 0 0 1rem;
+      }
+
+      .markdown-section h2 {
+        font-size: 1.55rem;
+        font-weight: 800;
+        margin: 2.7rem 0 1rem;
+        padding-top: 0.3rem;
+        border-top: 1px solid var(--tp-border);
+      }
+
+      .markdown-section h3 {
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin: 2rem 0 0.75rem;
+      }
+
+      .markdown-section p,
+      .markdown-section li,
+      .markdown-section blockquote {
+        color: var(--tp-text-soft);
+      }
+
+      .markdown-section a {
+        color: var(--tp-accent);
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .markdown-section a:hover {
+        color: #1d4ed8;
+        text-decoration: underline;
+      }
+
+      .markdown-section strong {
+        color: var(--tp-heading);
+      }
+
+      .markdown-section code,
+      .markdown-section pre,
+      .markdown-section tt {
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .markdown-section code {
+        color: var(--tp-code-text);
+        background: var(--tp-code-bg);
+        border: 1px solid var(--tp-border);
+        border-radius: 8px;
+        padding: 0.18em 0.45em;
+        font-size: 0.88em;
+      }
+
+      .markdown-section pre {
+        background: #0f172a;
+        color: #e2e8f0;
+        border-radius: 16px;
+        box-shadow: var(--tp-shadow);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        padding: 18px 20px;
+      }
+
+      .markdown-section pre code {
+        background: transparent;
+        border: 0;
+        color: inherit;
+        padding: 0;
+      }
+
+      .markdown-section blockquote {
+        background: #f8fbff;
+        border-left: 4px solid var(--tp-accent);
+        border-radius: 0 14px 14px 0;
+        padding: 12px 18px;
+      }
+
+      .markdown-section table {
+        display: table;
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        border: 1px solid var(--tp-border);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+
+      .markdown-section table th {
+        background: #f8fafc;
+        color: var(--tp-heading);
+        font-weight: 700;
+      }
+
+      .markdown-section table th,
+      .markdown-section table td {
+        border-bottom: 1px solid var(--tp-border);
+        border-right: 1px solid var(--tp-border);
+        padding: 12px 14px;
+      }
+
+      .markdown-section table tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .markdown-section table th:last-child,
+      .markdown-section table td:last-child {
+        border-right: 0;
+      }
+
+      .markdown-section img {
+        border: 1px solid var(--tp-border);
+        border-radius: 18px;
+        box-shadow: var(--tp-shadow);
+        background: #fff;
+      }
+
+      .anchor span {
+        color: var(--tp-heading) !important;
+      }
+
+      @media screen and (max-width: 768px) {
+        .markdown-section {
+          padding: 32px 22px 72px;
+        }
+
+        .markdown-section h1 {
+          font-size: 1.9rem;
+        }
+
+        .sidebar {
+          background: #ffffff;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">Loading...</div>
+    <script>
+      window.$docsify = {
+        name: "TestPipe",
+        nameLink: "/#/README.md",
+        homepage: "README.md",
+        loadSidebar: true,
+        alias: {
+          "/.*/_sidebar.md": "/_sidebar.md",
+        },
+        relativePath: false,
+        subMaxLevel: 3,
+        auto2top: true,
+        themeColor: "#2563eb",
+      };
+    </script>
+    <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
+  </body>
+</html>

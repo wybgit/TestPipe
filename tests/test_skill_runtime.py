@@ -71,6 +71,9 @@ class SkillRuntimeTest(unittest.TestCase):
         return {
             "pipeline": {
                 "name": "OnnxGitAtcPipeline",
+                "envCheckNode": {
+                    "env_script": env_script,
+                },
                 "fetchModelNode": {
                     "repo": repo,
                     "ref": "Abs",
@@ -79,10 +82,7 @@ class SkillRuntimeTest(unittest.TestCase):
                 },
                 "compileModelNode": {
                     "soc_version": "Ascend310P3",
-                    "env_script": env_script,
-                    "output_name": "abs_model.om",
                 },
-                "assertOmExistsNode": {"expected_value": True},
             },
             "cases": [{"case_id": case_id} for case_id in case_ids],
         }
@@ -296,16 +296,15 @@ class SkillRuntimeTest(unittest.TestCase):
                             "path": "Abs_testcase_5a6b43",
                             "model_pattern": "*.onnx",
                         },
+                        "envCheckNode": {
+                            "env_script": env_script,
+                        },
                         "compileModelNode": {
                             "soc_version": "Ascend310P3",
-                            "env_script": env_script,
                             "output_name": "abs_model.om",
                         },
-                        "assertOmExistsNode": {
-                            "expected_value": True,
-                        },
                     },
-                    "expected": {"test_passed": False},
+                    "expected": {"path_exists": False},
                 }
             }
             case_file = Path(tmp_dir) / "bad_case.yaml"
@@ -320,7 +319,7 @@ class SkillRuntimeTest(unittest.TestCase):
             )
             summary_ref = Path(str(run_result["result_location"])) / "summary.json"
             analysis = SkillRunner().run("result-analyzer", {"summary_ref": str(summary_ref)})
-            self.assertIn("test_passed expected", analysis["root_cause"])
+            self.assertIn("path_exists expected", analysis["root_cause"])
             self.assertTrue(analysis["fix_suggestions"])
 
     def test_run_skill_cli_outputs_json(self) -> None:
@@ -356,10 +355,14 @@ class SkillRuntimeTest(unittest.TestCase):
                 "case_id": "inline_case",
                 "pipeline": "OnnxGitAtcPipeline",
                 "inputs": {
-                    "resource_ref": {"kind": "git_dir", "repo": "repo", "subpath": "model"},
                     "soc_version": "Ascend310P3",
                 },
-                "expected": {"test_passed": True},
+                "inputs_by_node": {
+                    "fetchModelNode": {
+                        "resource_ref": {"kind": "git_dir", "repo": "repo", "subpath": "model"},
+                    },
+                },
+                "expected": {"path_exists": True},
             },
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -501,6 +504,44 @@ class SkillRuntimeTest(unittest.TestCase):
             env_snapshot = json.loads((run_dirs[0] / "env_profile.json").read_text(encoding="utf-8"))
             self.assertEqual(env_snapshot["host"]["mode"], "local")
             self.assertEqual(env_snapshot["metadata"]["profile_name"], "custom_local")
+
+    def test_export_pipeline_graph_cli_writes_dot_and_pdf(self) -> None:
+        bootstrap()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_dir, _ = self._create_git_resource_repo(Path(tmp_dir))
+            env_script = self._create_fake_atc_env(Path(tmp_dir))
+            case_file = self._write_case_file(
+                Path(tmp_dir),
+                "onnx.yaml",
+                self._onnx_case_document(repo=repo_dir, env_script=env_script, case_ids=["onnx_case"]),
+            )
+            export_dir = Path(tmp_dir) / "exports"
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                exit_code = main(
+                    [
+                        "export-pipeline-graph",
+                        str(case_file),
+                        "--output-dir",
+                        str(export_dir),
+                        "--json",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(buffer.getvalue())
+            dot_path = Path(payload["dot_path"])
+            pdf_path = Path(payload["pdf_path"])
+            self.assertTrue(dot_path.exists())
+            self.assertTrue(pdf_path.exists())
+            dot_text = dot_path.read_text(encoding="utf-8")
+            self.assertIn("OnnxGitAtcPipeline", dot_text)
+            self.assertIn("rankdir=TB", dot_text)
+            self.assertIn("Ascend310P3", dot_text)
+            self.assertIn("input: envCheckNode", dot_text)
+            self.assertNotIn("input: resource_ref", dot_text)
+            self.assertNotIn("input: atc_options", dot_text)
+            self.assertNotIn("<pipeline:atc_options>", dot_text)
+            self.assertNotIn("output_name", dot_text)
 
 
 if __name__ == "__main__":

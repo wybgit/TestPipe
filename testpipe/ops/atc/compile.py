@@ -8,6 +8,8 @@ from pathlib import Path
 from testpipe.core import TestOp, register_op
 from testpipe.spec import AttrSpec, OpSpec, PortSpec
 
+_DEFAULT_CANN_ENV_SCRIPT = "/home/wyb/Ascend/cann-8.5.0/set_env.sh"
+
 
 @register_op
 class ATCCompileOp(TestOp):
@@ -28,13 +30,6 @@ class ATCCompileOp(TestOp):
             AttrSpec(name="output_name", type="string", required=False, default="compiled_model.om", description="compiled output filename"),
             AttrSpec(name="timeout", type="int", required=False, default=30, description="command timeout"),
             AttrSpec(name="framework", type="int", required=False, default=5, description="atc framework id"),
-            AttrSpec(
-                name="env_script",
-                type="string",
-                required=False,
-                default="/home/wyb/Ascend/cann-8.5.0/set_env.sh",
-                description="cann environment script path",
-            ),
         ],
     )
 
@@ -50,7 +45,7 @@ class ATCCompileOp(TestOp):
             destination = Path(step_context.step_dir) / output_name
             step_context.host.exec(["cp", str(source), str(destination)], timeout=timeout)
         else:
-            env_script = str(step_context.inputs.get("env_script", step_context.attrs.get("env_script", "/home/wyb/Ascend/cann-8.5.0/set_env.sh")))
+            env_script = str(step_context.inputs.get("env_script", _DEFAULT_CANN_ENV_SCRIPT))
             if not Path(env_script).expanduser().exists():
                 raise RuntimeError(f"cann env script not found: {env_script}")
             output_prefix = self._output_prefix(Path(step_context.step_dir), output_name)

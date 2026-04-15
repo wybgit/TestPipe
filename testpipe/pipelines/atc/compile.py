@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from testpipe.core import Pipeline, register_pipeline
-from testpipe.ops.assertions import PathExistsOp, ValueCompareOp
+from testpipe.ops.assertions import PathExistsOp
 from testpipe.ops.atc import ATCCompileOp
 from testpipe.ops.builtin import EnvCheckOp
 from testpipe.ops.resource import ResourceFetchOp
@@ -14,15 +14,13 @@ class OnnxGitAtcPipeline(Pipeline):
     """Fetch an ONNX model from git resources and compile it into OM through ATC."""
 
     def define(self) -> None:
-        resource_ref = self.add_input("resource_ref", "object", description="git-backed resource reference")
         soc_version = self.add_input("soc_version", "string", description="target soc version")
         atc_options = self.add_input("atc_options", "object", required=False, description="extra atc options")
         output_name = self.add_input("output_name", "string", required=False, description="output om file name")
-        env_script = self.add_input("env_script", "string", required=False, description="cann env script")
 
         self.set_stage("prepare")
-        self.add_node("envCheckNode", EnvCheckOp())
-        fetch_model = self.add_node("fetchModelNode", ResourceFetchOp(), inputs={"resource_ref": resource_ref})
+        env_check = self.add_node("envCheckNode", EnvCheckOp())
+        fetch_model = self.add_node("fetchModelNode", ResourceFetchOp())
 
         self.set_stage("compile")
         compile_model = self.add_node(
@@ -33,7 +31,7 @@ class OnnxGitAtcPipeline(Pipeline):
                 "soc_version": soc_version,
                 "atc_options": atc_options,
                 "output_name": output_name,
-                "env_script": env_script,
+                "env_script": env_check.output("env_script"),
             },
         )
 
@@ -43,14 +41,6 @@ class OnnxGitAtcPipeline(Pipeline):
             PathExistsOp(),
             inputs={"target_path": compile_model.output("om_path")},
         )
-        assert_om_exists = self.add_node(
-            "assertOmExistsNode",
-            ValueCompareOp(operator="eq", expected_value=True),
-            inputs={"actual_value": check_om_exists.output("path_exists")},
-        )
-
-        self.add_output("resolved_commit", fetch_model.output("resolved_commit"), type="string", description="resolved git commit")
         self.add_output("model_path", fetch_model.output("model_path"), type="artifact:path", description="resolved onnx model path")
         self.add_output("om_path", compile_model.output("om_path"), type="artifact:path", description="compiled om artifact")
         self.add_output("path_exists", check_om_exists.output("path_exists"), type="bool", description="compiled om existence")
-        self.add_output("test_passed", assert_om_exists.output("test_passed"), type="bool", description="compile assertion result")

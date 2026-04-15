@@ -12,6 +12,7 @@ import yaml
 from testpipe import bootstrap
 from testpipe.core import PipelineCompiler, create_pipeline, list_pipelines
 from testpipe.engine import TestEngine
+from testpipe.graph import export_pipeline_graph
 
 from testpipe.loaders import EnvProfileLoader, FrameworkConfigLoader, StructuredLoader, TestCaseLoader
 from testpipe.skills import SkillRunner, get_skill, list_skills
@@ -51,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
     check_case_parser.add_argument("case_file")
     check_case_parser.add_argument("--case-id", default=None, help="check only the specified case_id when the file contains multiple cases")
     check_case_parser.add_argument("--json", action="store_true")
+
+    export_graph_parser = subparsers.add_parser("export-pipeline-graph", help="Export pipeline graph DOT/PDF for a YAML test case")
+    export_graph_parser.add_argument("case_file")
+    export_graph_parser.add_argument("--case-id", default=None, help="export only the specified case_id when the file contains multiple cases")
+    export_graph_parser.add_argument("--output-dir", default="graph_exports")
+    export_graph_parser.add_argument("--json", action="store_true")
 
     list_parser = subparsers.add_parser("list-pipelines", help="List registered pipelines")
     list_parser.add_argument("--json", action="store_true")
@@ -186,6 +193,47 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False).rstrip())
         return 0 if status != "fail" else 2
+
+    if args.command == "export-pipeline-graph":
+        cases = TestCaseLoader().load_many(args.case_file)
+        if args.case_id is not None:
+            cases = [case for case in cases if case.case_id == args.case_id]
+            if not cases:
+                raise ValueError(f"case_id not found in case file: {args.case_id}")
+        exports = []
+        output_dir = Path(args.output_dir)
+        pipeline_specs: dict[str, object] = {}
+        for case in cases:
+            pipeline_spec = pipeline_specs.get(case.pipeline)
+            if pipeline_spec is None:
+                pipeline_spec = PipelineCompiler().compile(create_pipeline(case.pipeline))
+                pipeline_specs[case.pipeline] = pipeline_spec
+            case_dir = output_dir / case.case_id
+            exports.append(
+                {
+                    "case_id": case.case_id,
+                    **export_pipeline_graph(
+                        pipeline_spec,
+                        case,
+                        case_dir,
+                        basename="pipeline_graph",
+                        render_pdf=True,
+                    ),
+                }
+            )
+        payload: dict[str, Any]
+        if len(exports) == 1:
+            payload = exports[0]
+        else:
+            payload = {
+                "case_count": len(exports),
+                "exports": exports,
+            }
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False).rstrip())
+        return 0
 
     return 1
 

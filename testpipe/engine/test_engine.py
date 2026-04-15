@@ -14,6 +14,7 @@ from testpipe.core import StepExecutionError, get_op_class, is_assert_op_class
 from testpipe.engine.context import ExecutionContext, MappingView, StepContext
 from testpipe.engine.planner import ExecutionPlanner
 from testpipe.engine.result import ResultSummary, evaluate_expected
+from testpipe.graph import export_pipeline_graph
 from testpipe.infra import ActionRunner, DeviceExecutor, HostExecutor, TraceRecorder, TransferExecutor
 
 try:
@@ -170,6 +171,13 @@ class TestEngine:
             if self.debug:
                 self._write_reproduce_script(run_dir, trace_recorder)
                 trace_recorder.save()
+            self._write_pipeline_graph(
+                pipeline_spec=pipeline_spec,
+                case_spec=case_spec,
+                run_dir=run_dir,
+                node_outputs=context.node_outputs,
+                pipeline_outputs=outputs,
+            )
         return summary
 
     def _build_step_result(
@@ -545,6 +553,28 @@ class TestEngine:
             source_outputs = context.node_outputs.get(binding.source_name, {})
             outputs[item.name] = source_outputs.get(binding.source_port)
         return outputs
+
+    def _write_pipeline_graph(
+        self,
+        *,
+        pipeline_spec,
+        case_spec,
+        run_dir: Path,
+        node_outputs: dict[str, dict[str, Any]],
+        pipeline_outputs: dict[str, object],
+    ) -> None:
+        try:
+            export_pipeline_graph(
+                pipeline_spec,
+                case_spec,
+                run_dir,
+                basename="pipeline_graph",
+                node_outputs=node_outputs,
+                pipeline_outputs=pipeline_outputs,
+                render_pdf=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            (run_dir / "pipeline_graph.error.txt").write_text(str(exc) + "\n", encoding="utf-8")
 
     def _indent_wrapped(self, text: str, *, prefix: str, width: int = 100) -> list[str]:
         wrapped = textwrap.wrap(text, width=width, break_long_words=False, break_on_hyphens=False)

@@ -30,20 +30,9 @@ class ResourceFetchOp(TestOp):
         ],
         outputs=[
             PortSpec(
-                name="resource_root",
-                type="artifact:path",
-                description="materialized resource root",
-            ),
-            PortSpec(
                 name="model_path",
                 type="artifact:path",
                 description="workspace-local model path",
-            ),
-            PortSpec(
-                name="resolved_commit",
-                type="string",
-                required=False,
-                description="resolved git commit when resource is fetched from git",
             ),
         ],
         attrs=[],
@@ -51,7 +40,6 @@ class ResourceFetchOp(TestOp):
 
     def execute(self, step_context) -> dict[str, str]:
         resource_ref = step_context.inputs.get("resource_ref")
-        resolved_commit = ""
         target_root = Path(step_context.artifacts.root_dir) / f"{step_context.node_name}_resource"
         self._remove_path(target_root)
 
@@ -61,7 +49,7 @@ class ResourceFetchOp(TestOp):
                 if simple_git_ref is None:
                     raise RuntimeError("resource_ref must be an object")
             resource_ref = simple_git_ref or resource_ref
-            materialized_path, resolved_commit = self._fetch_resource_ref(step_context, resource_ref, target_root)
+            materialized_path, _ = self._fetch_resource_ref(step_context, resource_ref, target_root)
         else:
             source_root = self._resolve_local_resource(step_context)
             materialized_path = self._materialize_local_resource(source_root, target_root)
@@ -71,9 +59,7 @@ class ResourceFetchOp(TestOp):
             pattern=self._resource_model_pattern(resource_ref),
         )
         return {
-            "resource_root": str(materialized_path),
             "model_path": str(model_path),
-            "resolved_commit": resolved_commit,
         }
 
     def _build_simple_git_resource_ref(self, step_context) -> dict[str, object] | None:

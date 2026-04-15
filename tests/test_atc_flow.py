@@ -123,7 +123,7 @@ class AtcMainlineFlowTest(unittest.TestCase):
     def test_resource_fetch_op_can_materialize_git_directory(self) -> None:
         bootstrap()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_dir, commit = self._create_git_resource_repo(Path(tmp_dir))
+            repo_dir, _ = self._create_git_resource_repo(Path(tmp_dir))
             context = self._build_step_context(
                 Path(tmp_dir),
                 node_name="fetchModelNode",
@@ -136,11 +136,9 @@ class AtcMainlineFlowTest(unittest.TestCase):
                 attrs={},
             )
             outputs = ResourceFetchOp().execute(context)
-            self.assertEqual(outputs["resolved_commit"], commit)
-            self.assertTrue(Path(outputs["resource_root"]).exists())
             self.assertTrue(Path(outputs["model_path"]).exists())
-            self.assertEqual(Path(outputs["resource_root"]).name, "Abs_testcase_5a6b43")
             self.assertEqual(Path(outputs["model_path"]).name, "Abs_testcase_5a6b43.onnx")
+            self.assertEqual(Path(outputs["model_path"]).parent.parent.name, "Abs_testcase_5a6b43")
             self.assertFalse((Path(tmp_dir) / "run" / "steps" / "fetchModelNode" / "git_materialized").exists())
 
     def test_resource_fetch_op_can_fallback_to_github_archive(self) -> None:
@@ -178,10 +176,8 @@ class AtcMainlineFlowTest(unittest.TestCase):
             ):
                 outputs = ResourceFetchOp().execute(context)
 
-            self.assertEqual(outputs["resolved_commit"], "archive_commit")
-            self.assertTrue(Path(outputs["resource_root"]).exists())
-            self.assertEqual(Path(outputs["resource_root"]).name, "Abs_testcase_5a6b43")
             self.assertEqual(Path(outputs["model_path"]).name, "Abs_testcase_5a6b43.onnx")
+            self.assertEqual(Path(outputs["model_path"]).parent.parent.name, "Abs_testcase_5a6b43")
 
     def test_atc_compile_op_supports_extra_args(self) -> None:
         bootstrap()
@@ -204,9 +200,9 @@ class AtcMainlineFlowTest(unittest.TestCase):
                         "args_file": str(args_log),
                     },
                 },
-                attrs={"output_name": "model.om", "timeout": 30, "framework": 5, "env_script": env_script},
+                attrs={"output_name": "model.om", "timeout": 30, "framework": 5},
             )
-            outputs = ATCCompileOp(output_name="model.om", timeout=30, framework=5, env_script=env_script).execute(context)
+            outputs = ATCCompileOp(output_name="model.om", timeout=30, framework=5).execute(context)
             self.assertTrue(Path(outputs["om_path"]).exists())
             logged_args = args_log.read_text(encoding="utf-8")
             self.assertIn("--precision_mode=allow_fp32_to_fp16", logged_args)
@@ -253,7 +249,7 @@ class AtcMainlineFlowTest(unittest.TestCase):
     def test_onnx_git_atc_pipeline_executes_with_fake_atc(self) -> None:
         bootstrap()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_dir, commit = self._create_git_resource_repo(Path(tmp_dir))
+            repo_dir, _ = self._create_git_resource_repo(Path(tmp_dir))
             env_script = self._create_fake_atc_env(Path(tmp_dir))
             case = CaseSpec(
                 case_id="onnx_git_atc_case",
@@ -261,6 +257,9 @@ class AtcMainlineFlowTest(unittest.TestCase):
                 pipeline="OnnxGitAtcPipeline",
                 inputs={},
                 inputs_by_node={
+                    "envCheckNode": {
+                        "env_script": env_script,
+                    },
                     "fetchModelNode": {
                         "repo": repo_dir,
                         "ref": "Abs",
@@ -269,12 +268,8 @@ class AtcMainlineFlowTest(unittest.TestCase):
                     },
                     "compileModelNode": {
                         "soc_version": "Ascend310P3",
-                        "env_script": env_script,
                         "output_name": "abs_model.om",
                         "atc_options": {"precision_mode": "allow_fp32_to_fp16"},
-                    },
-                    "assertOmExistsNode": {
-                        "expected_value": True,
                     },
                 },
             )
@@ -286,11 +281,20 @@ class AtcMainlineFlowTest(unittest.TestCase):
                 env_profile=EnvProfile.local_default(),
             )
             self.assertEqual(summary.status, "passed")
-            self.assertEqual(summary.outputs["resolved_commit"], commit)
             self.assertTrue(Path(str(summary.outputs["model_path"])).exists())
             self.assertTrue(Path(str(summary.outputs["om_path"])).exists())
             self.assertTrue(summary.outputs["path_exists"])
-            self.assertTrue(summary.outputs["test_passed"])
+            run_dir = Path(str(summary.run_dir))
+            dot_path = run_dir / "pipeline_graph.dot"
+            pdf_path = run_dir / "pipeline_graph.pdf"
+            self.assertTrue(dot_path.exists())
+            self.assertTrue(pdf_path.exists())
+            dot_text = dot_path.read_text(encoding="utf-8")
+            self.assertIn("OnnxGitAtcPipeline", dot_text)
+            self.assertIn("rankdir=TB", dot_text)
+            self.assertIn("Ascend310P3", dot_text)
+            self.assertIn("Abs_testcase_5a6b43", dot_text)
+            self.assertIn("path_exists", dot_text)
 
 
 if __name__ == "__main__":

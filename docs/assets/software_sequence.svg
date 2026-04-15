@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
+    </marker>
+    <style>
+      .title { font: 700 28px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 14px Arial, sans-serif; fill: #475569; }
+      .actor { fill: #eff6ff; stroke: #93c5fd; stroke-width: 1.5; rx: 14; }
+      .engine { fill: #ecfccb; stroke: #84cc16; stroke-width: 1.5; rx: 14; }
+      .export { fill: #fdf2f8; stroke: #f472b6; stroke-width: 1.5; rx: 14; }
+      .label { font: 700 16px Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 13px Arial, sans-serif; fill: #1e293b; }
+      .life { stroke: #cbd5e1; stroke-width: 2; stroke-dasharray: 8 8; }
+      .msg { stroke: #334155; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .ret { stroke: #64748b; stroke-width: 1.7; fill: none; stroke-dasharray: 7 5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <text x="48" y="46" class="title">TestPipe Software Sequence</text>
+  <text x="48" y="72" class="subtitle">Mainline flow for testpipe run examples/testcases/onnx_git_atc.yaml</text>
+
+  <rect x="70" y="100" width="120" height="46" class="actor" />
+  <text x="107" y="128" class="label">User</text>
+
+  <rect x="250" y="100" width="140" height="46" class="actor" />
+  <text x="293" y="128" class="label">CLI</text>
+
+  <rect x="454" y="100" width="170" height="46" class="actor" />
+  <text x="481" y="128" class="label">TestCaseLoader</text>
+
+  <rect x="694" y="100" width="178" height="46" class="actor" />
+  <text x="726" y="128" class="label">PipelineCompiler</text>
+
+  <rect x="936" y="100" width="160" height="46" class="engine" />
+  <text x="970" y="128" class="label">TestEngine</text>
+
+  <rect x="1140" y="100" width="110" height="46" class="export" />
+  <text x="1164" y="128" class="label">Exporter</text>
+
+  <line x1="130" y1="146" x2="130" y2="770" class="life" />
+  <line x1="320" y1="146" x2="320" y2="770" class="life" />
+  <line x1="539" y1="146" x2="539" y2="770" class="life" />
+  <line x1="783" y1="146" x2="783" y2="770" class="life" />
+  <line x1="1016" y1="146" x2="1016" y2="770" class="life" />
+  <line x1="1195" y1="146" x2="1195" y2="770" class="life" />
+
+  <path d="M130 180 H320" class="msg" />
+  <text x="176" y="171" class="body">1. run case.yaml</text>
+
+  <path d="M320 230 H539" class="msg" />
+  <text x="358" y="221" class="body">2. load YAML and merge pipeline/cases</text>
+
+  <path d="M539 268 H320" class="ret" />
+  <text x="384" y="259" class="body">3. CaseSpec</text>
+
+  <path d="M320 320 H783" class="msg" />
+  <text x="466" y="311" class="body">4. create_pipeline() + compile()</text>
+
+  <path d="M783 358 H320" class="ret" />
+  <text x="500" y="349" class="body">5. PipelineSpec</text>
+
+  <path d="M320 410 H1016" class="msg" />
+  <text x="574" y="401" class="body">6. execute(case_spec, pipeline_spec, env_profile)</text>
+
+  <rect x="944" y="446" width="144" height="146" class="engine" />
+  <text x="972" y="474" class="label">Node Steps</text>
+  <text x="964" y="504" class="body">7. EnvCheckOp</text>
+  <text x="964" y="528" class="body">8. ResourceFetchOp</text>
+  <text x="964" y="552" class="body">9. ATCCompileOp</text>
+  <text x="964" y="576" class="body">10. PathExistsOp</text>
+
+  <path d="M1016 620 H1195" class="msg" />
+  <text x="1040" y="611" class="body">11. export DOT/PDF graph</text>
+
+  <path d="M1195 658 H1016" class="ret" />
+  <text x="1060" y="649" class="body">12. graph paths</text>
+
+  <path d="M1016 710 H320" class="ret" />
+  <text x="612" y="701" class="body">13. summary.json + run_dir + outputs</text>
+
+  <path d="M320 748 H130" class="ret" />
+  <text x="178" y="739" class="body">14. console summary</text>
+</svg>

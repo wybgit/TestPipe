@@ -32,14 +32,7 @@ testpipe list-pipelines
 当前最小示例会返回:
 
 ```text
-LocalCompileAssertPipeline
-LocalCompilePipeline
 OnnxGitAtcPipeline
-MockDeviceJsonPipeline
-MockDevicePipeline
-MockDeviceRoundTripPipeline
-MockDeviceUppercasePipeline
-SmokePipeline
 ```
 
 ### 4. 运行示例用例
@@ -52,13 +45,13 @@ testpipe run examples/testcases/onnx_git_atc.yaml
 
 默认会直接使用仓库根目录 `testpipe.config.yaml` 中的默认环境，也就是当前宿主机本地环境。
 
-该样例会走 `ResourceFetch(git_dir) -> ATCCompile -> PathExists -> ValueCompare`，其中 `ATCCompile` 会执行:
+该样例会走 `EnvCheck -> ResourceFetch(git_dir) -> ATCCompile -> PathExists`，其中 `ATCCompile` 会先通过 `EnvCheckNode` 校验并接收:
 
 ```bash
 source /home/wyb/Ascend/cann-8.5.0/set_env.sh
 ```
 
-随后调用 `atc` 完成 ONNX 到 OM 的真实转换，默认核心命令形态对齐为:
+随后调用 `atc` 完成 ONNX 到 OM 的真实转换，默认核心命令形态为:
 
 ```bash
 atc --model=./Abs_testcase_5a6b43.onnx --framework=5 --output=Abs_testcase_5a6b43 --soc_version=Ascend310P3
@@ -203,15 +196,15 @@ runs/
 ```yaml
 pipeline:
   name: OnnxGitAtcPipeline
+  envCheckNode:
+    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
   fetchModelNode:
     repo: https://github.com/wybgit/onnx-layer.git
+    ref: Abs
     path: Abs_testcase_5a6b43
     model_pattern: "*.onnx"
   compileModelNode:
     soc_version: Ascend310P3
-    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
-  assertOmExistsNode:
-    expected_value: true
 cases:
   - case_id: onnx_git_atc_case
     description: 验证从Git仓获取ONNX并成功完成ATC转换
@@ -234,7 +227,6 @@ cases:
 - `cases[*]` 下除这些用例字段外，其余字段都直接写节点名
 - `fetchModelNode.path` 可以是 Git 仓内目录，也可以是单个文件路径
 - `fetchModelNode.path` 为目录时下载该目录内容，为文件时只下载该文件
-- 断言值应该写到断言节点输入中，例如 `assertOmExistsNode.expected_value`
 - 节点输入会直接注入对应节点，不再要求先声明成 Pipeline 顶层输入
 - 如果某个端口已经由上游边连接驱动，就不应该再在用例里手动赋值
 - 当前示例节点命名统一推荐使用 `*Node` 后缀，Pipeline 命名统一使用 `*Pipeline` 后缀
@@ -294,12 +286,6 @@ testpipe run-skill pipeline-generator /path/to/pipeline-input.yaml --json
 - `ActionRunner`
 - `TraceRecorder`
 - `ArtifactStore`
-- 内置 `SmokePipeline` 与 `LocalCompilePipeline`
-- 内置 `LocalCompileAssertPipeline`
-- 内置 `MockDeviceJsonPipeline`
-- 内置 `MockDevicePipeline`
-- 内置 `MockDeviceRoundTripPipeline`
-- 内置 `MockDeviceUppercasePipeline`
 - 内置 `OnnxGitAtcPipeline`
 - 内置模板注册表与 skill 注册表
 - `run-skill` CLI 入口
@@ -312,8 +298,7 @@ testpipe run-skill pipeline-generator /path/to/pipeline-input.yaml --json
 - `transfer.put / transfer.get / device.exec` trace 记录
 - `ResourceFetch` 主线支持本地路径与 Git 仓目录资源
 - `ATCCompile` 主线支持真实 `atc` 执行与 `extra atc options`
-- 通用断言算子 `TextEquals / PathExists / ValueCompare / JsonObjectAssert`
-- JSON 结果读取算子 `ReadJsonArtifact`
+- 当前内置主线算子保留 `EnvCheck / ResourceFetch / ATCCompile / PathExists`
 
 当前尚未完整接入:
 
@@ -328,7 +313,7 @@ testpipe run-skill pipeline-generator /path/to/pipeline-input.yaml --json
 
 - 统一执行主链路
 - 基础 Host / mock-device / SSH-SFTP 运行骨架
-- 一组可直接运行的内置 Pipeline 和示例用例
+- 当前仅保留一个内置主线 Pipeline 和示例用例
 - 示例目录当前只保留 `onnx_git_atc.yaml`
 - normal/debug 双模式输出
 - 模板/skill 驱动的生成、检查、执行、分析入口
@@ -381,7 +366,7 @@ python3 -m unittest discover -s tests -v
 重点推荐:
 
 - [软件需求说明书](/home/wyb/AscendCode/TestPipe/docs/requirements/02_软件需求说明书.md)
+- [框架架构图](/home/wyb/AscendCode/TestPipe/docs/architecture/06_框架架构图.md)
+- [软件时序调用图](/home/wyb/AscendCode/TestPipe/docs/architecture/09_软件时序调用图.md)
 - [核心对象模型设计](/home/wyb/AscendCode/TestPipe/docs/architecture/07_核心对象模型设计.md)
 - [执行与追踪机制设计](/home/wyb/AscendCode/TestPipe/docs/architecture/08_执行与追踪机制设计.md)
-- [LLM 原生模板与 Skills 设计](/home/wyb/AscendCode/TestPipe/docs/architecture/09_LLM原生模板与Skills设计.md)
-- [外部代理调用 Skills 指南](/home/wyb/AscendCode/TestPipe/docs/guides/user/01_外部代理调用Skills指南.md)

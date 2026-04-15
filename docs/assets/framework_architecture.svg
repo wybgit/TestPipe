@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#475569" />
+    </marker>
+    <style>
+      .title { font: 700 28px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 14px Arial, sans-serif; fill: #475569; }
+      .section { font: 700 18px Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 14px Arial, sans-serif; fill: #1e293b; }
+      .small { font: 400 12px Arial, sans-serif; fill: #475569; }
+      .line { stroke: #475569; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .group { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; rx: 18; }
+      .card-blue { fill: #e0f2fe; stroke: #7dd3fc; stroke-width: 1.5; rx: 16; }
+      .card-amber { fill: #fef3c7; stroke: #fbbf24; stroke-width: 1.5; rx: 16; }
+      .card-green { fill: #dcfce7; stroke: #4ade80; stroke-width: 1.5; rx: 16; }
+      .card-rose { fill: #ffe4e6; stroke: #fb7185; stroke-width: 1.5; rx: 16; }
+      .card-slate { fill: #eef2ff; stroke: #94a3b8; stroke-width: 1.5; rx: 16; }
+    </style>
+  </defs>
+
+  <text x="56" y="50" class="title">TestPipe Framework Architecture</text>
+  <text x="56" y="76" class="subtitle">Current implementation: YAML Case + Pipeline DSL + PipelineSpec + TestEngine + DOT/PDF export</text>
+
+  <rect x="40" y="100" width="1120" height="600" class="group" />
+
+  <rect x="72" y="132" width="220" height="122" class="card-blue" />
+  <text x="92" y="166" class="section">Case Layer</text>
+  <text x="92" y="195" class="body">YAML testcase</text>
+  <text x="92" y="218" class="body">pipeline + cases</text>
+  <text x="92" y="241" class="small">source: examples/testcases/*.yaml</text>
+
+  <rect x="72" y="298" width="220" height="130" class="card-blue" />
+  <text x="92" y="332" class="section">Loader / Validation</text>
+  <text x="92" y="361" class="body">TestCaseLoader</text>
+  <text x="92" y="384" class="body">CaseSpec</text>
+  <text x="92" y="407" class="body">CaseChecker</text>
+
+  <rect x="348" y="132" width="232" height="122" class="card-amber" />
+  <text x="368" y="166" class="section">Authoring Layer</text>
+  <text x="368" y="195" class="body">Pipeline.define()</text>
+  <text x="368" y="218" class="body">add_input / add_node / add_output</text>
+  <text x="368" y="241" class="small">source: testpipe/core/pipeline.py</text>
+
+  <rect x="348" y="298" width="232" height="130" class="card-amber" />
+  <text x="368" y="332" class="section">Compiler Layer</text>
+  <text x="368" y="361" class="body">PipelineCompiler</text>
+  <text x="368" y="384" class="body">PipelineSpec / NodeSpec</text>
+  <text x="368" y="407" class="body">InputBindingSpec / OutputBindingSpec</text>
+
+  <rect x="638" y="132" width="242" height="122" class="card-green" />
+  <text x="658" y="166" class="section">Execution Layer</text>
+  <text x="658" y="195" class="body">TestEngine</text>
+  <text x="658" y="218" class="body">StepContext / artifacts / steps</text>
+  <text x="658" y="241" class="small">source: testpipe/engine/test_engine.py</text>
+
+  <rect x="638" y="298" width="242" height="130" class="card-green" />
+  <text x="658" y="332" class="section">Built-in Ops</text>
+  <text x="658" y="361" class="body">EnvCheck</text>
+  <text x="658" y="384" class="body">ResourceFetch</text>
+  <text x="658" y="407" class="body">ATCCompile / PathExists</text>
+
+  <rect x="938" y="132" width="190" height="122" class="card-rose" />
+  <text x="958" y="166" class="section">Visualization</text>
+  <text x="958" y="195" class="body">GraphExporter</text>
+  <text x="958" y="218" class="body">DOT + PDF</text>
+  <text x="958" y="241" class="small">source: testpipe/graph/exporter.py</text>
+
+  <rect x="938" y="298" width="190" height="130" class="card-rose" />
+  <text x="958" y="332" class="section">Outputs</text>
+  <text x="958" y="361" class="body">runs/&lt;case&gt;/summary.json</text>
+  <text x="958" y="384" class="body">pipeline_graph.dot / .pdf</text>
+  <text x="958" y="407" class="body">steps/ + resources/</text>
+
+  <rect x="250" y="498" width="700" height="150" class="card-slate" />
+  <text x="280" y="536" class="section">Current Mainline Pipeline: OnnxGitAtcPipeline</text>
+  <text x="280" y="572" class="body">envCheckNode -&gt; fetchModelNode -&gt; compileModelNode -&gt; checkOmExistsNode</text>
+  <text x="280" y="600" class="body">Only flow-level inputs stay on Pipeline: soc_version / atc_options / output_name</text>
+  <text x="280" y="628" class="body">Single-node resource parameters stay on fetchModelNode: repo / ref / path / model_pattern</text>
+
+  <path d="M292 193 H336" class="line" />
+  <path d="M292 363 H336" class="line" />
+  <path d="M580 193 H626" class="line" />
+  <path d="M580 363 H626" class="line" />
+  <path d="M880 193 H926" class="line" />
+  <path d="M880 363 H926" class="line" />
+  <path d="M460 430 V482" class="line" />
+  <path d="M760 430 V482" class="line" />
+  <path d="M183 428 C183 470, 260 470, 260 498" class="line" />
+  <path d="M1033 428 C1033 470, 910 470, 910 498" class="line" />
+</svg>

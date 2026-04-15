@@ -82,15 +82,15 @@ cases:
 ```yaml
 pipeline:
   name: OnnxGitAtcPipeline
+  envCheckNode:
+    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
   fetchModelNode:
     repo: https://github.com/wybgit/onnx-layer.git
+    ref: Abs
     path: Abs_testcase_5a6b43
     model_pattern: "*.onnx"
   compileModelNode:
     soc_version: Ascend310P3
-    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
-  assertOmExistsNode:
-    expected_value: true
 cases:
   - case_id: onnx_git_atc_case
     description: 验证从 Git 仓获取 ONNX 并成功转换为 OM

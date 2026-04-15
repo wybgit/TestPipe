@@ -1,5 +1,7 @@
 pipeline:
   name: OnnxGitAtcPipeline
+  envCheckNode:
+    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
   fetchModelNode:
     repo: https://github.com/wybgit/onnx-layer.git
     ref: Abs
@@ -7,9 +9,6 @@ pipeline:
     model_pattern: "*.onnx"
   compileModelNode:
     soc_version: Ascend310P3
-    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
-  assertOmExistsNode:
-    expected_value: true
 cases:
   - case_id: onnx_git_atc_case
     description: 验证从Git仓获取ONNX并成功完成ATC转换

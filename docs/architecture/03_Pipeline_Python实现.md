@@ -1,606 +1,180 @@
-# Pipeline Python实现方案
+# Pipeline Python 实现
 
----
+本文档描述当前 TestPipe 中已经落地的 Pipeline Python DSL 实现，而不是早期的 `forward()` 风格原型。
 
-## 1. 设计理念
+## 1. 当前实现位置
 
-### 1.1 类比PyTorch
+- `testpipe/core/pipeline.py`
+- `testpipe/core/compiler.py`
+- `testpipe/pipelines/atc/compile.py`
 
-| PyTorch | TestPipe |
-|---------|----------|
-| `nn.Module` | `Pipeline` |
-| `nn.Conv2d()` | `ATCCompileOp()` |
-| `forward()` | `forward()` |
-| `model.register_module()` | `pipeline.register_op()` |
-| `model.eval()` | `pipeline.run()` |
+## 2. 设计目标
 
-### 1.2 核心优势
+当前 Pipeline DSL 解决的是“如何把测试流程写成可读、可编译、可执行、可导图的串行构图代码”。
 
-✅ **代码即配置** - 用Python代码定义Pipeline,无需JSON  
-✅ **IDE支持** - 代码补全、类型检查、跳转定义  
-✅ **灵活组合** - 可以用if/for等控制流  
-✅ **易于复用** - 继承、组合、装饰器  
-✅ **版本管理** - 代码可以用Git管理  
-✅ **内置注册** - 自动注册为框架内置Pipeline
+核心要求：
 
----
+- 用 Python 直接描述流程。
+- 输入、节点、输出都可静态编译。
+- 代码顺序尽量等于执行顺序。
+- 既支持执行，也支持导出 DOT/PDF 图。
 
-## 2. Pipeline基类设计
+## 3. 核心模型
+
+### 3.1 Authoring 层
+
+- `Pipeline`
+- `PipelineInputRef`
+- `NodeHandle`
+- `NodeOutputRef`
+- `NodeDefinition`
+
+### 3.2 Spec 层
+
+- `PipelineSpec`
+- `NodeSpec`
+- `InputBindingSpec`
+- `EdgeSpec`
+- `OutputBindingSpec`
+
+Pipeline 作者只直接使用 Authoring API，执行引擎只消费 Spec。
+
+## 4. DSL 入口
+
+当前 Pipeline 的唯一入口是实现 `define()`：
 
 ```python
-# testpipe/core/pipeline.py
-from abc import ABC, abstractmethod
-from typing import Dict, Any, List
-from collections import OrderedDict
-
 class Pipeline(ABC):
-    """
-    Pipeline基类
-    
-    类似nn.Module,所有Pipeline必须继承此类
-    """
-    
-    def __init__(self):
-        # 存储算子(类似nn.Module._modules)
-        self._ops: OrderedDict[str, TestOp] = OrderedDict()
-        
-        # Pipeline元信息
-        self.pipeline_name: str = self.__class__.__name__
-        self.pipeline_description: str = self.__doc__ or ""
-        
-        # 输入输出定义
-        self.pipeline_inputs: List[str] = []
-        self.pipeline_outputs: List[str] = []
-    
     @abstractmethod
-    def forward(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        定义Pipeline的执行流程
-        
-        Args:
-            inputs: Pipeline输入字典
-            
-        Returns:
-            Pipeline输出字典
-        """
-        pass
-    
-    def __setattr__(self, name: str, value: Any):
-        """
-        重载属性设置,自动注册TestOp
-        
-        类似nn.Module.__setattr__
-        """
-        if isinstance(value, TestOp):
-            # 自动注册算子
-            self._ops[name] = value
-            value.name = name
-        
-        super().__setattr__(name, value)
-    
-    def ops(self) -> Dict[str, TestOp]:
-        """返回所有算子"""
-        return self._ops
-    
-    def run(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        执行Pipeline
-        
-        Args:
-            inputs: 输入数据
-            
-        Returns:
-            输出结果
-        """
-        # 创建执行上下文
-        context = ExecutionContext(work_dir=Path("/tmp/testpipe"))
-        
-        # 将inputs放入context
-        for key, value in inputs.items():
-            context.set(key, value)
-        
-        # 注入API到所有算子
-        api = OpAPI()
-        for op in self._ops.values():
-            op.api = api
-            op.logger = logging.getLogger(f"{self.pipeline_name}.{op.name}")
-        
-        # 执行forward
-        try:
-            outputs = self.forward(inputs)
-            return outputs
-        except Exception as e:
-            raise PipelineExecutionError(self.pipeline_name, str(e))
-    
-    def to_json(self) -> Dict:
-        """
-        导出为JSON格式(用于可视化)
-        
-        Returns:
-            JSON字典
-        """
-        nodes = []
-        for name, op in self._ops.items():
-            nodes.append({
-                "Node_Name": name,
-                "Op_Type": op.op_type,
-                "Inputs": op.inputs,
-                "Outputs": op.outputs,
-                "Attributes": op.attributes
-            })
-        
-        return {
-            "Pipeline_Name": self.pipeline_name,
-            "Pipeline_Description": self.pipeline_description,
-            "Pipeline_Inputs": self.pipeline_inputs,
-            "Pipeline_Outputs": self.pipeline_outputs,
-            "Nodes": nodes
-        }
-    
-    def __repr__(self):
-        lines = [f"{self.__class__.__name__}("]
-        for name, op in self._ops.items():
-            lines.append(f"  ({name}): {op.op_type}")
-        lines.append(")")
-        return "\n".join(lines)
+    def define(self) -> None:
+        """Define ports, steps, and edges."""
 ```
 
----
+在 `define()` 里，通常按下面顺序描述：
 
-## 3. Pipeline注册机制
+1. `add_input()` 定义输入。
+2. `set_stage()` 标记阶段。
+3. `add_node()` 按执行顺序添加节点。
+4. `add_output()` 暴露最终输出。
+
+## 5. 推荐写法
+
+### 5.1 先定义流程级输入
 
 ```python
-# testpipe/core/pipeline_registry.py
-from typing import Dict, Type
-
-class PipelineRegistry:
-    """Pipeline注册表"""
-    
-    _registry: Dict[str, Type[Pipeline]] = {}
-    
-    @classmethod
-    def register(cls, pipeline_class: Type[Pipeline]):
-        """注册Pipeline"""
-        name = pipeline_class.__name__
-        if name in cls._registry:
-            raise ValueError(f"Pipeline {name} 已注册")
-        
-        cls._registry[name] = pipeline_class
-        print(f"✓ 注册Pipeline: {name}")
-    
-    @classmethod
-    def get(cls, name: str) -> Type[Pipeline]:
-        """获取Pipeline类"""
-        if name not in cls._registry:
-            raise KeyError(f"未找到Pipeline: {name}")
-        return cls._registry[name]
-    
-    @classmethod
-    def list_pipelines(cls) -> List[str]:
-        """列出所有Pipeline"""
-        return list(cls._registry.keys())
-    
-    @classmethod
-    def create(cls, name: str) -> Pipeline:
-        """创建Pipeline实例"""
-        pipeline_class = cls.get(name)
-        return pipeline_class()
-
-
-# 装饰器: 自动注册Pipeline
-def register_pipeline(pipeline_class: Type[Pipeline]) -> Type[Pipeline]:
-    """
-    装饰器: 自动注册Pipeline
-    
-    用法:
-        @register_pipeline
-        class MyPipeline(Pipeline):
-            pass
-    """
-    PipelineRegistry.register(pipeline_class)
-    return pipeline_class
+soc_version = self.add_input("soc_version", "string", description="target soc version")
 ```
 
----
-
-## 4. 完整示例 - ATC E2E Pipeline
+### 5.2 再按串行流程定义节点
 
 ```python
-# testpipe/pipelines/atc_e2e_pipeline.py
-from testpipe.core import Pipeline, register_pipeline
-from testpipe.ops import (
-    EnvCheckOp, ModelPrepOp, ATCCompileOp,
-    TransferOp, InferenceOp, AccuracyCheckOp
+self.set_stage("prepare")
+env_check = self.add_node("envCheckNode", EnvCheckOp())
+fetch_model = self.add_node("fetchModelNode", ResourceFetchOp())
+
+self.set_stage("compile")
+compile_model = self.add_node(
+    "compileModelNode",
+    ATCCompileOp(output_name="model.om", timeout=600),
+    inputs={
+        "model_path": fetch_model.output("model_path"),
+        "soc_version": soc_version,
+        "env_script": env_check.output("env_script"),
+    },
 )
-from typing import Dict, Any
-
-@register_pipeline
-class ATC_E2E_Pipeline(Pipeline):
-    """ATC模型转换端到端测试Pipeline"""
-    
-    def __init__(self):
-        super().__init__()
-        
-        # 定义输入输出
-        self.pipeline_inputs = ['model_source', 'soc_version', 'input_data', 'golden_output']
-        self.pipeline_outputs = ['test_passed', 'accuracy_score']
-        
-        # 定义算子(自动注册)
-        self.check_env = EnvCheckOp(
-            check_items=['python_version', 'atc_tool', 'npu_device'],
-            timeout=60
-        )
-        
-        self.prepare_model = ModelPrepOp(
-            cache_enabled=True,
-            timeout=300
-        )
-        
-        self.compile = ATCCompileOp(
-            framework=5,
-            output_type='FP16',
-            precision_mode='allow_fp32_to_fp16',
-            timeout=600
-        )
-        
-        self.transfer = TransferOp(
-            transfer_method='auto',
-            timeout=300
-        )
-        
-        self.inference = InferenceOp(
-            device_id=0,
-            timeout=300
-        )
-        
-        self.check_accuracy = AccuracyCheckOp(
-            threshold=0.99,
-            metrics=['cosine', 'mse'],
-            timeout=60
-        )
-    
-    def forward(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """定义执行流程"""
-        
-        # 1. 检查环境
-        env_ready = self.check_env()
-        
-        # 2. 准备模型
-        model_path = self.prepare_model(
-            model_source=inputs['model_source']
-        )
-        
-        # 3. 编译模型
-        om_path = self.compile(
-            model_path=model_path,
-            soc_version=inputs['soc_version']
-        )
-        
-        # 4. 传输文件
-        remote_om_path, remote_input_path = self.transfer(
-            om_path=om_path,
-            input_data=inputs['input_data']
-        )
-        
-        # 5. 执行推理
-        output_data = self.inference(
-            om_path=remote_om_path,
-            input_path=remote_input_path
-        )
-        
-        # 6. 检查精度
-        test_passed, accuracy_score = self.check_accuracy(
-            output_data=output_data,
-            golden_output=inputs['golden_output']
-        )
-        
-        return {
-            'test_passed': test_passed,
-            'accuracy_score': accuracy_score
-        }
 ```
 
----
-
-## 5. 算子调用方式
-
-### 5.1 算子基类支持__call__
+### 5.3 最后定义输出
 
 ```python
-# testpipe/core/test_op.py
-class TestOp(ABC):
-    """测试算子基类"""
-    
-    def __call__(self, **kwargs):
-        """
-        使算子可以像函数一样调用
-        
-        用法:
-            result = self.my_op(input1=value1, input2=value2)
-        """
-        # 创建临时context
-        context = ExecutionContext.get_current()
-        
-        # 将kwargs放入context
-        for key, value in kwargs.items():
-            context.set(key, value)
-        
-        # 执行算子
-        outputs = self.execute(context)
-        
-        # 返回结果
-        if len(outputs) == 1:
-            return list(outputs.values())[0]
-        else:
-            return tuple(outputs.values())
+self.add_output("om_path", compile_model.output("om_path"), type="artifact:path")
 ```
 
-### 5.2 使用示例
+## 6. 当前示例
 
-```python
-def forward(self, inputs):
-    # 方式1: 直接调用
-    env_ready = self.check_env()
-    
-    # 方式2: 传参调用
-    model_path = self.prepare_model(model_source=inputs['model_source'])
-    
-    # 方式3: 多返回值
-    remote_om, remote_input = self.transfer(
-        om_path=om_path,
-        input_data=inputs['input_data']
-    )
-    
-    return {'result': result}
-```
-
----
-
-## 6. 高级特性
-
-### 6.1 条件执行
-
-```python
-def forward(self, inputs):
-    # 根据条件选择不同路径
-    if inputs.get('skip_accuracy_check'):
-        output = self.inference(...)
-        return {'output': output}
-    else:
-        output = self.inference(...)
-        passed, score = self.check_accuracy(output, inputs['golden'])
-        return {'test_passed': passed, 'accuracy_score': score}
-```
-
-### 6.2 循环执行
-
-```python
-def forward(self, inputs):
-    results = []
-    
-    # 对多个模型执行相同流程
-    for model in inputs['models']:
-        om_path = self.compile(model_path=model)
-        output = self.inference(om_path=om_path)
-        results.append(output)
-    
-    return {'results': results}
-```
-
-### 6.3 Pipeline组合
+当前 examples 使用的 Pipeline 是 `OnnxGitAtcPipeline`：
 
 ```python
 @register_pipeline
-class MultiSOC_Pipeline(Pipeline):
-    """多SOC测试Pipeline"""
-    
-    def __init__(self):
-        super().__init__()
-        
-        # 组合其他Pipeline
-        self.atc_pipeline = ATC_E2E_Pipeline()
-        self.perf_pipeline = Performance_Pipeline()
-    
-    def forward(self, inputs):
-        # 串行执行多个Pipeline
-        atc_result = self.atc_pipeline.run(inputs)
-        perf_result = self.perf_pipeline.run(inputs)
-        
-        return {
-            'atc_passed': atc_result['test_passed'],
-            'perf_passed': perf_result['test_passed']
-        }
-```
+class OnnxGitAtcPipeline(Pipeline):
+    """Fetch an ONNX model from git resources and compile it into OM through ATC."""
 
-### 6.4 动态Pipeline
+    def define(self) -> None:
+        soc_version = self.add_input("soc_version", "string", description="target soc version")
+        atc_options = self.add_input("atc_options", "object", required=False, description="extra atc options")
+        output_name = self.add_input("output_name", "string", required=False, description="output om file name")
 
-```python
-@register_pipeline
-class Dynamic_Pipeline(Pipeline):
-    """动态Pipeline"""
-    
-    def __init__(self, num_layers: int = 3):
-        super().__init__()
-        
-        # 动态创建算子
-        self.layers = []
-        for i in range(num_layers):
-            self.layers.append(ProcessOp(name=f"layer_{i}"))
-    
-    def forward(self, inputs):
-        x = inputs['data']
-        
-        # 动态执行
-        for layer in self.layers:
-            x = layer(data=x)
-        
-        return {'output': x}
-```
+        self.set_stage("prepare")
+        env_check = self.add_node("envCheckNode", EnvCheckOp())
+        fetch_model = self.add_node("fetchModelNode", ResourceFetchOp())
 
----
-
-## 7. TestCase使用Pipeline
-
-### 7.1 YAML引用Python Pipeline
-
-```yaml
-pipeline:
-  name: OnnxGitAtcPipeline
-  fetchModelNode:
-    repo: https://github.com/wybgit/onnx-layer.git
-    path: Abs_testcase_5a6b43
-    model_pattern: "*.onnx"
-  compileModelNode:
-    soc_version: Ascend310P3
-    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
-  assertOmExistsNode:
-    expected_value: true
-cases:
-  - case_id: onnx_git_atc_case
-    description: 验证 Git 模型资源获取与 ATC 转换
-    level: P0
-```
-
-### 7.2 TestCaseLoader加载
-
-```python
-# testpipe/loaders/testcase_loader.py
-class TestCaseLoader:
-    """TestCase加载器"""
-    
-    def load(self, yaml_path: Path) -> TestCase:
-        """加载TestCase"""
-        with open(yaml_path, 'r') as f:
-            data = yaml.safe_load(f)
-        
-        tc_data = data['test_case']
-        
-        # 从注册表获取Pipeline
-        pipeline_name = tc_data['pipeline']
-        pipeline = PipelineRegistry.create(pipeline_name)
-        
-        return TestCase(
-            name=tc_data['name'],
-            pipeline=pipeline,
-            inputs=tc_data['inputs'],
-            expected=tc_data.get('expected', {})
+        self.set_stage("compile")
+        compile_model = self.add_node(
+            "compileModelNode",
+            ATCCompileOp(output_name="model.om", timeout=600),
+            inputs={
+                "model_path": fetch_model.output("model_path"),
+                "soc_version": soc_version,
+                "atc_options": atc_options,
+                "output_name": output_name,
+                "env_script": env_check.output("env_script"),
+            },
         )
+
+        self.set_stage("assert")
+        check_om_exists = self.add_node(
+            "checkOmExistsNode",
+            PathExistsOp(),
+            inputs={"target_path": compile_model.output("om_path")},
+        )
+
+        self.add_output("model_path", fetch_model.output("model_path"), type="artifact:path")
+        self.add_output("om_path", compile_model.output("om_path"), type="artifact:path")
+        self.add_output("path_exists", check_om_exists.output("path_exists"), type="bool")
 ```
 
----
+当前推荐的判断标准是：
 
-## 8. 目录结构
+- 只被单个节点消费、且更适合贴近资源定义的参数，直接放在节点输入里，例如 `fetchModelNode.repo / ref / path / model_pattern`。
+- 需要作为流程公共入口暴露的参数，再定义成 Pipeline 输入，例如 `soc_version / atc_options / output_name`。
 
-```
-testpipe/
-├── core/
-│   ├── pipeline.py              # Pipeline基类
-│   ├── pipeline_registry.py     # Pipeline注册表
-│   └── test_op.py               # TestOp基类
-├── pipelines/                   # 内置Pipeline
-│   ├── __init__.py
-│   ├── atc_e2e_pipeline.py
-│   ├── ascendc_pipeline.py
-│   ├── custom_op_pipeline.py
-│   └── amct_quant_pipeline.py
-├── ops/                         # 测试算子
-│   ├── __init__.py
-│   ├── env_check_op.py
-│   └── ...
-└── loaders/
-    └── testcase_loader.py
-```
+## 7. 编译流程
 
----
+Python DSL 不直接执行。执行前会先编译成 `PipelineSpec`。
 
-## 9. CLI使用
+编译后的核心结果包括：
 
-```bash
-# 列出所有Pipeline
-testpipe list-pipelines
+- `inputs`
+- `outputs`
+- `nodes`
+- `edges`
+- `output_bindings`
 
-# 查看Pipeline详情
-testpipe describe-pipeline OnnxGitAtcPipeline
+这使得下游能力可以共享统一结构：
 
-# 运行TestCase(自动加载Pipeline)
-testpipe run examples/testcases/onnx_git_atc.yaml
+- `TestEngine` 执行
+- 图导出
+- Case 校验
+- API 文档生成
 
-# 导出Pipeline为JSON(用于可视化)
-testpipe export-pipeline OnnxGitAtcPipeline --format json --output pipeline.json
+## 8. 为什么不再使用旧设计
 
-# 导出为ONNX
-testpipe export-pipeline OnnxGitAtcPipeline --format onnx --output pipeline.onnx
-```
+旧文档里的 `forward()` / `op_type` / 自动注册 `_ops` 方案已经不再适用，原因是：
 
----
+- 不利于静态导出结构。
+- 图关系不够明确。
+- 与当前按文件夹组织 Op/Pipeline 的实现不一致。
+- 会引入与运行时逻辑耦合过深的问题。
 
-## 10. 优势对比
+当前 DSL 更强调“显式构图”：
 
-### Python Pipeline vs JSON Pipeline
+- 输入是什么
+- 节点是什么
+- 节点从哪里取输入
+- 最终输出是什么
 
-| 特性 | Python Pipeline | JSON Pipeline |
-|------|----------------|---------------|
-| 灵活性 | ✅ 支持if/for/函数 | ❌ 静态配置 |
-| IDE支持 | ✅ 补全/跳转/检查 | ❌ 无 |
-| 复用性 | ✅ 继承/组合 | ❌ 复制粘贴 |
-| 版本管理 | ✅ Git友好 | ✅ Git友好 |
-| 易读性 | ✅ 代码即文档 | ✅ 结构清晰 |
-| 学习曲线 | 中等 | 低 |
-| 可视化 | ✅ 可导出JSON/ONNX | ✅ 原生支持 |
+## 9. 相关文档
 
----
-
-## 11. 最佳实践
-
-### 11.1 Pipeline命名
-
-- 类名: `Xxx_Pipeline` (如`ATC_E2E_Pipeline`)
-- 文件名: `xxx_pipeline.py` (如`atc_e2e_pipeline.py`)
-
-### 11.2 算子初始化
-
-```python
-# 推荐: 在__init__中配置算子
-self.compile = ATCCompileOp(
-    framework=5,
-    output_type='FP16',
-    timeout=600
-)
-
-# 不推荐: 在forward中创建算子
-def forward(self, inputs):
-    compile_op = ATCCompileOp(...)  # 每次都创建新实例
-```
-
-### 11.3 输入输出声明
-
-```python
-def __init__(self):
-    super().__init__()
-    
-    # 明确声明输入输出
-    self.pipeline_inputs = ['model_source', 'soc_version']
-    self.pipeline_outputs = ['test_passed', 'accuracy_score']
-```
-
-### 11.4 文档字符串
-
-```python
-@register_pipeline
-class MyPipeline(Pipeline):
-    """
-    我的测试Pipeline
-    
-    输入:
-        - model_source: 模型路径
-        - soc_version: SOC版本
-    
-    输出:
-        - test_passed: 测试是否通过
-    """
-```
-
----
-
-**文档版本**: v1.0  
-**最后更新**: 2026-04-11
+- [Pipeline API](../api/pipeline_api.md)
+- [Node API](../api/node_api.md)
+- [核心对象模型设计](07_核心对象模型设计.md)
