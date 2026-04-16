@@ -236,49 +236,29 @@ cases:
 - 当前示例节点命名统一推荐使用 `*Node` 后缀，Pipeline 命名统一使用 `*Pipeline` 后缀
 - 旧格式 `test_case` / `test_suite` 仍然兼容读取，但不再推荐继续新增
 
-### 8. 模板与 Skill 快速链路
+### 8. Agent Skills 目录
 
-当前已经支持用结构化 payload 文件驱动常见流程。可以先用 `testpipe show-template <name>` 查看模板骨架，再把内容保存成自己的 YAML 文件后执行:
+仓库根目录新增 `skills/` 目录，用于给 `OpenCode`、`Claude Code` 这类 AI 代码开发工具提供可直接读取的 agent skill 资产。
 
-1. 生成用例
+当前内置 4 个面向外部 agent 的 skill:
 
-```bash
-testpipe show-template case-template
-testpipe run-skill case-generator /path/to/case-generator-input.yaml --json
-```
+- `test_node`
+- `test_pipeline`
+- `test_case_generation`
+- `test_result_analysis`
 
-2. 检查用例
-
-```bash
-testpipe show-template case-check-template
-testpipe run-skill case-checker /path/to/case-check-input.yaml --json
-```
-
-3. 生成执行计划或直接执行
+其中 `test_node` 和 `test_pipeline` 额外提供了脚手架脚本，便于 AI agent 先生成骨架再补全实现:
 
 ```bash
-testpipe show-template run-template
-testpipe run-skill case-runner /path/to/run-input.yaml --json
-```
-
-4. 生成算子或 Pipeline 脚手架
-
-```bash
-testpipe show-template test-op-template
-testpipe run-skill test-op-generator /path/to/test-op-input.yaml --json
-testpipe show-template pipeline-template
-testpipe run-skill pipeline-generator /path/to/pipeline-input.yaml --json
+python skills/test_node/scripts/generate_scaffold.py --request /path/to/request.yaml --output-root .
+python skills/test_pipeline/scripts/generate_scaffold.py --request /path/to/request.yaml --output-root .
 ```
 
 说明:
 
-- 不带 `scaffold.enabled: true` 时，generator 只返回结构化草稿
-- 开启 scaffold 后，会按模板中的 `root_dir` 写入生成文件
-- `case-runner` 使用 `execute: false` 时只返回计划，`execute: true` 时会实际执行
-- `case-runner --json` 的执行阶段日志会出现在 `execution_console_log` 字段中，便于脚本消费
-- `case-runner` 支持从 `framework_config` 加载框架配置，并通过 `env_profile` 选择命名环境
-- 框架只内置 deterministic skills，不在框架内部承载大模型调用
-- 后续如果需要 AI 参与，可由 `OpenCode`、`Claude Code` 等外部代理填模板后调用 `run-skill`
+- `skills/` 面向外部 AI 代码开发工具参考，当前是仓库内唯一保留的 skill 资产目录
+- `testpipe` CLI 已不再提供内置 `run-skill / show-skill / show-template` 调度入口
+- 推荐使用方式见 [docs/guides/developer/03_Agent_Skills使用指南.md](docs/guides/developer/03_Agent_Skills使用指南.md)
 
 ## 当前实现范围
 
@@ -291,10 +271,7 @@ testpipe run-skill pipeline-generator /path/to/pipeline-input.yaml --json
 - `TraceRecorder`
 - `ArtifactStore`
 - 内置 `OnnxGitAtcPipeline`
-- 内置模板注册表与 skill 注册表
-- `run-skill` CLI 入口
-- `case-generator / case-checker / case-runner / result-analyzer`
-- `test-op-generator / pipeline-generator` 脚手架生成
+- 仓库级 `skills/` agent 协作资产目录
 - 默认框架配置加载与命名环境解析
 - 兼容 legacy `EnvProfile` YAML/JSON 直载方式
 - `DeviceExecutor` / `TransferExecutor` 的 mock 模式
@@ -320,7 +297,7 @@ testpipe run-skill pipeline-generator /path/to/pipeline-input.yaml --json
 - 当前仅保留一个内置主线 Pipeline 和示例用例
 - 示例目录当前只保留 `onnx_git_atc.yaml`
 - normal/debug 双模式输出
-- 模板/skill 驱动的生成、检查、执行、分析入口
+- 面向外部 AI 工具的 `skills/` 协作入口
 
 后续开发将优先围绕真实案例推进，不再继续单独扩张抽象层。
 
@@ -342,22 +319,9 @@ testpipe check-case examples/testcases/onnx_git_atc.yaml
 # 列出已注册 Pipeline
 testpipe list-pipelines
 
-# 列出内置模板与 skill
-testpipe list-templates
-testpipe list-skills
-
-# 查看模板骨架与 skill 契约
-testpipe show-template case-template
-testpipe show-skill case-runner --json
-
-# 用自定义 payload 文件直接执行 skill
-testpipe run-skill case-generator /path/to/case-generator-input.yaml --json
-testpipe run-skill case-checker /path/to/case-check-input.yaml --json
-testpipe run-skill case-runner /path/to/run-input.yaml --json
-
-# 直接生成脚手架文件
-testpipe run-skill test-op-generator /path/to/test-op-input.yaml --json
-testpipe run-skill pipeline-generator /path/to/pipeline-input.yaml --json
+# 用外部 agent skill 脚手架生成代码骨架
+python skills/test_node/scripts/generate_scaffold.py --request /path/to/request.yaml --output-root .
+python skills/test_pipeline/scripts/generate_scaffold.py --request /path/to/request.yaml --output-root .
 
 # 运行测试
 python3 -m unittest discover -s tests -v
@@ -374,3 +338,4 @@ python3 -m unittest discover -s tests -v
 - [软件时序调用图](/home/wyb/AscendCode/TestPipe/docs/architecture/09_软件时序调用图.md)
 - [核心对象模型设计](/home/wyb/AscendCode/TestPipe/docs/architecture/07_核心对象模型设计.md)
 - [执行与追踪机制设计](/home/wyb/AscendCode/TestPipe/docs/architecture/08_执行与追踪机制设计.md)
+- [Agent Skills 使用指南](/home/wyb/AscendCode/TestPipe/docs/guides/developer/03_Agent_Skills使用指南.md)

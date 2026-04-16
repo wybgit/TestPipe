@@ -1,0 +1,19 @@
+task: generate_test_case
+pipeline_name: OnnxGitAtcPipeline
+pipeline_source: testpipe/pipelines/atc/compile.py
+goal: generate a smoke testcase YAML for the target pipeline
+case_strategy:
+  - happy_path
+  - missing_input_guard
+shared_defaults:
+  compileModelNode:
+    soc_version: Ascend310P3
+case_variants:
+  - case_id: smoke_case
+    description: normal path
+    level: P2
+    node_overrides:
+      fetchModelNode:
+        repo: https://example.com/model-zoo.git
+        branch: main
+        path: models/abs

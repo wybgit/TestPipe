@@ -1,0 +1,13 @@
+task: analyze_test_result
+run_dir: runs/fetch_verify_smoke_20260415_120000
+summary_file: runs/fetch_verify_smoke_20260415_120000/summary.json
+execution_log: runs/fetch_verify_smoke_20260415_120000/execution.log
+focus:
+  - failed_step
+  - root_cause
+  - evidence
+  - fix_suggestion
+known_context:
+  pipeline_name: ModelFetchVerifyPipeline
+  testcase_file: examples/testcases/model_fetch_verify.yaml
+  environment: ssh

@@ -1,0 +1,13 @@
+task: analyze_test_result
+run_dir: runs/sample_case_20260415_120000
+summary_file: runs/sample_case_20260415_120000/summary.json
+execution_log: runs/sample_case_20260415_120000/execution.log
+focus:
+  - failed_step
+  - root_cause
+  - retryability
+  - next_action
+known_context:
+  pipeline_name: OnnxGitAtcPipeline
+  testcase_file: examples/testcases/onnx_git_atc.yaml
+  environment: local

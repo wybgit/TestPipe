@@ -23,6 +23,7 @@
   - [开发总览](/guides/developer/00_开发总览.md)
   - [自定义测试算子](/guides/developer/01_自定义测试算子.md)
   - [自定义 API 与 Action 扩展](/guides/developer/02_自定义API与Action扩展.md)
+  - [Agent Skills 使用指南](/guides/developer/03_Agent_Skills使用指南.md)
 
 - 需求说明
   - [原始需求](/requirements/00_原始需求.md)

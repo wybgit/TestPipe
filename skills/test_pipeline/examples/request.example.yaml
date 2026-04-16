@@ -1,0 +1,55 @@
+task: create_test_pipeline
+pipeline_name: ModelFetchVerifyPipeline
+module_group: custom
+module_name: model_fetch_verify
+description: fetch a model artifact and verify the downloaded path exists
+pipeline_inputs:
+  - name: repo
+    type: string
+    required: true
+    description: git repository url
+  - name: branch
+    type: string
+    required: true
+    description: git branch name
+  - name: model_dir
+    type: string
+    required: true
+    description: model directory inside the repository
+pipeline_outputs:
+  - name: model_path
+    type: artifact:path
+    source: fetchModelNode.model_path
+    description: resolved model path
+  - name: path_exists
+    type: bool
+    source: checkModelNode.path_exists
+    description: whether the model path exists
+nodes:
+  - name: fetchModelNode
+    stage: prepare
+    import_path: testpipe.ops.resource
+    op_class: ResourceFetchOp
+    constructor_args:
+      model_pattern: "*.onnx"
+    inputs:
+      repo: $pipeline.repo
+      branch: $pipeline.branch
+      path: $pipeline.model_dir
+  - name: checkModelNode
+    stage: assert
+    import_path: testpipe.ops.assertions
+    op_class: PathExistsOp
+    constructor_args: {}
+    inputs:
+      target_path: fetchModelNode.model_path
+case_defaults:
+  pipeline_level_overrides:
+    fetchModelNode:
+      repo: https://example.com/model-zoo.git
+      branch: main
+      path: models/abs
+  case:
+    case_id: fetch_verify_smoke
+    description: verify a fetched model can be resolved locally
+    level: P2

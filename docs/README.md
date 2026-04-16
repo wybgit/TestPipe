@@ -10,6 +10,7 @@ TestPipe 当前采用统一的 Python DSL + `PipelineSpec` 执行模型。
 - [内置 Pipeline API](api/pipelines_catalog.md)
 - [Node API](api/node_api.md)
 - [Pipeline API](api/pipeline_api.md)
+- [Agent Skills 使用指南](guides/developer/03_Agent_Skills使用指南.md)
 - [Pipeline Python 实现](architecture/03_Pipeline_Python实现.md)
 - [Pipeline 可视化导出](architecture/05_Pipeline可视化导出.md)
 - [框架架构图](architecture/06_框架架构图.md)
@@ -54,6 +55,7 @@ TestPipe 当前采用统一的 Python DSL + `PipelineSpec` 执行模型。
 - [开发总览](guides/developer/00_开发总览.md)
 - [自定义测试算子](guides/developer/01_自定义测试算子.md)
 - [自定义 API 与 Action 扩展](guides/developer/02_自定义API与Action扩展.md)
+- [Agent Skills 使用指南](guides/developer/03_Agent_Skills使用指南.md)
 
 ### 需求说明
 

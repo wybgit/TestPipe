@@ -1,0 +1,32 @@
+task: create_test_node
+op_name: FileDigest
+module_group: custom
+module_name: file_digest
+description: compute a file digest and expose the normalized path for downstream checks
+inputs:
+  - name: target_path
+    type: artifact:path
+    required: true
+    description: file path that should be hashed
+outputs:
+  - name: digest
+    type: string
+    required: true
+    description: digest string for the input file
+  - name: resolved_path
+    type: artifact:path
+    required: true
+    description: normalized path used for hashing
+attrs:
+  - name: algorithm
+    type: string
+    required: false
+    default: sha256
+    description: hashlib algorithm name
+behavior_summary:
+  - validate the target path exists and points to a file
+  - normalize the file path before hashing
+  - compute the digest and return both digest and resolved_path
+test_expectations:
+  - hashing a known file returns a stable digest
+  - a missing file raises a clear error

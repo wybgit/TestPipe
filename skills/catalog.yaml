@@ -1,0 +1,25 @@
+skills:
+  - name: test-node
+    path: skills/test_node/SKILL.md
+    purpose: scaffold and implement a new TestOp or test node capability
+    template: skills/test_node/templates/request.template.yaml
+    helper_script: skills/test_node/scripts/generate_scaffold.py
+    modifies_framework_code: true
+  - name: test-pipeline
+    path: skills/test_pipeline/SKILL.md
+    purpose: scaffold and implement a new Pipeline definition and testcase example
+    template: skills/test_pipeline/templates/request.template.yaml
+    helper_script: skills/test_pipeline/scripts/generate_scaffold.py
+    modifies_framework_code: true
+  - name: test-case-generation
+    path: skills/test_case_generation/SKILL.md
+    purpose: generate or normalize testcase YAML for an existing pipeline
+    template: skills/test_case_generation/templates/request.template.yaml
+    helper_script: null
+    modifies_framework_code: false
+  - name: test-result-analysis
+    path: skills/test_result_analysis/SKILL.md
+    purpose: analyze run outputs and produce a structured diagnosis report
+    template: skills/test_result_analysis/templates/request.template.yaml
+    helper_script: null
+    modifies_framework_code: false

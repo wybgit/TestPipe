@@ -14,9 +14,7 @@ from testpipe.core import PipelineCompiler, create_pipeline, list_pipelines
 from testpipe.engine import TestEngine
 from testpipe.graph import export_pipeline_graph
 
-from testpipe.loaders import EnvProfileLoader, FrameworkConfigLoader, StructuredLoader, TestCaseLoader
-from testpipe.skills import SkillRunner, get_skill, list_skills
-from testpipe.templates import get_template, list_templates
+from testpipe.loaders import EnvProfileLoader, FrameworkConfigLoader, TestCaseLoader
 from testpipe.validation import CaseChecker
 
 
@@ -62,24 +60,6 @@ def build_parser() -> argparse.ArgumentParser:
     list_parser = subparsers.add_parser("list-pipelines", help="List registered pipelines")
     list_parser.add_argument("--json", action="store_true")
 
-    list_templates_parser = subparsers.add_parser("list-templates", help="List built-in LLM templates")
-    list_templates_parser.add_argument("--json", action="store_true")
-
-    show_template_parser = subparsers.add_parser("show-template", help="Show a built-in LLM template")
-    show_template_parser.add_argument("name")
-    show_template_parser.add_argument("--json", action="store_true")
-
-    list_skills_parser = subparsers.add_parser("list-skills", help="List built-in LLM skills")
-    list_skills_parser.add_argument("--json", action="store_true")
-
-    show_skill_parser = subparsers.add_parser("show-skill", help="Show a built-in LLM skill contract")
-    show_skill_parser.add_argument("name")
-    show_skill_parser.add_argument("--json", action="store_true")
-
-    run_skill_parser = subparsers.add_parser("run-skill", help="Execute a built-in skill against a YAML/JSON template input")
-    run_skill_parser.add_argument("name")
-    run_skill_parser.add_argument("input_file")
-    run_skill_parser.add_argument("--json", action="store_true")
     return parser
 
 
@@ -95,49 +75,6 @@ def main(argv: list[str] | None = None) -> int:
         else:
             for name in pipelines:
                 print(name)
-        return 0
-
-    if args.command == "list-templates":
-        templates = list_templates()
-        if args.json:
-            print(json.dumps(templates, indent=2, ensure_ascii=False))
-        else:
-            for name in templates:
-                print(name)
-        return 0
-
-    if args.command == "show-template":
-        template = get_template(args.name)
-        if args.json:
-            print(json.dumps(template.to_dict(), indent=2, ensure_ascii=False))
-        else:
-            print(yaml.safe_dump(template.body, allow_unicode=True, sort_keys=False).rstrip())
-        return 0
-
-    if args.command == "list-skills":
-        skills = list_skills()
-        if args.json:
-            print(json.dumps(skills, indent=2, ensure_ascii=False))
-        else:
-            for name in skills:
-                print(name)
-        return 0
-
-    if args.command == "show-skill":
-        skill = get_skill(args.name)
-        if args.json:
-            print(json.dumps(skill.to_dict(), indent=2, ensure_ascii=False))
-        else:
-            print(yaml.safe_dump(skill.to_dict(), allow_unicode=True, sort_keys=False).rstrip())
-        return 0
-
-    if args.command == "run-skill":
-        payload = StructuredLoader().load(args.input_file)
-        result = SkillRunner().run(args.name, payload)
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print(yaml.safe_dump(result, allow_unicode=True, sort_keys=False).rstrip())
         return 0
 
     if args.command == "run":

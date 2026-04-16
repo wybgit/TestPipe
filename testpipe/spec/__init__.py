@@ -17,8 +17,6 @@ from .models import (
     OutputBindingSpec,
     PipelineSpec,
     PortSpec,
-    SkillSpec,
-    TemplateSpec,
     TransportPolicy,
 )
 
@@ -39,7 +37,5 @@ __all__ = [
     "OutputBindingSpec",
     "PipelineSpec",
     "PortSpec",
-    "SkillSpec",
-    "TemplateSpec",
     "TransportPolicy",
 ]

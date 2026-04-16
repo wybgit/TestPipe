@@ -1,0 +1,27 @@
+task: create_test_node
+op_name: SampleCheck
+module_group: custom
+module_name: sample_check
+description: describe the business goal of this TestOp
+inputs:
+  - name: input_path
+    type: artifact:path
+    required: true
+    description: path consumed by the op
+outputs:
+  - name: check_passed
+    type: bool
+    required: true
+    description: whether the check passed
+attrs:
+  - name: strict_mode
+    type: bool
+    required: false
+    default: true
+    description: enable strict validation
+behavior_summary:
+  - list the main execution steps
+  - list which providers or artifacts should be used
+test_expectations:
+  - successful path returns structured outputs
+  - invalid input raises a clear error

@@ -158,31 +158,6 @@ class CaseSpec:
 
 
 @dataclass(slots=True)
-class TemplateSpec:
-    name: str
-    task_type: str
-    version: str = "1.0"
-    description: str = ""
-    body: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(slots=True)
-class SkillSpec:
-    name: str
-    category: str
-    template_name: str
-    version: str = "1.0"
-    description: str = ""
-    contract: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(slots=True)
 class IssueSpec:
     level: str
     field: str

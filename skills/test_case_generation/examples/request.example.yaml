@@ -1,0 +1,24 @@
+task: generate_test_case
+pipeline_name: ModelFetchVerifyPipeline
+pipeline_source: testpipe/pipelines/custom/model_fetch_verify.py
+goal: generate one smoke case and one invalid-path case
+case_strategy:
+  - smoke
+  - invalid_input
+shared_defaults:
+  fetchModelNode:
+    repo: https://example.com/model-zoo.git
+    branch: main
+case_variants:
+  - case_id: smoke_fetch_verify
+    description: verify the happy path
+    level: P2
+    node_overrides:
+      fetchModelNode:
+        path: models/abs
+  - case_id: missing_model_dir
+    description: invalid model dir should fail early
+    level: P1
+    node_overrides:
+      fetchModelNode:
+        path: models/not_found

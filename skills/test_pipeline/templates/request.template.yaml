@@ -1,0 +1,51 @@
+task: create_test_pipeline
+pipeline_name: SamplePipeline
+module_group: custom
+module_name: sample_pipeline
+description: describe the end-to-end test goal
+pipeline_inputs:
+  - name: repo
+    type: string
+    required: true
+    description: source repository
+  - name: branch
+    type: string
+    required: true
+    description: source branch
+  - name: path
+    type: string
+    required: true
+    description: target path inside the repository
+pipeline_outputs:
+  - name: final_result
+    type: bool
+    source: verifyNode.path_exists
+    description: final verification result produced by the pipeline
+nodes:
+  - name: fetchNode
+    stage: prepare
+    import_path: testpipe.ops.resource
+    op_class: ResourceFetchOp
+    constructor_args:
+      model_pattern: "*.onnx"
+    inputs:
+      repo: $pipeline.repo
+      branch: $pipeline.branch
+      path: $pipeline.path
+  - name: verifyNode
+    stage: assert
+    import_path: testpipe.ops.assertions
+    op_class: PathExistsOp
+    constructor_args: {}
+    inputs:
+      target_path: fetchNode.model_path
+case_defaults:
+  pipeline_level_overrides:
+    fetchNode:
+      repo: https://example.com/repo.git
+      branch: main
+      path: models/demo
+  case:
+    case_id: sample_case
+    description: smoke testcase for the generated pipeline
+    level: P2
