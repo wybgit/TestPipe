@@ -18,6 +18,7 @@ class TestCaseLoader:
     _VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
     _PIPELINE_RESERVED_KEYS = {
         "name",
+        "nodes",
         "vars",
         "variables",
         "inputs",
@@ -33,6 +34,7 @@ class TestCaseLoader:
         "name",
         "description",
         "level",
+        "nodes",
         "vars",
         "variables",
         "inputs",
@@ -109,7 +111,7 @@ class TestCaseLoader:
         pipeline_inputs = self._mapping(pipeline_data.get("inputs", {}))
         pipeline_inputs_by_node = self._deep_merge(
             self._normalize_inputs_by_node(pipeline_data.get("inputs_by_node", {})),
-            self._extract_direct_node_inputs(pipeline_data, reserved_keys=self._PIPELINE_RESERVED_KEYS),
+            self._extract_node_inputs(pipeline_data, reserved_keys=self._PIPELINE_RESERVED_KEYS),
         )
         pipeline_expected = self._mapping(pipeline_data.get("expected", {}))
         pipeline_tags = list(pipeline_data.get("tags", []))
@@ -133,7 +135,7 @@ class TestCaseLoader:
                 pipeline_inputs_by_node,
                 self._deep_merge(
                     self._normalize_inputs_by_node(item.get("inputs_by_node", {})),
-                    self._extract_direct_node_inputs(item, reserved_keys=self._CASE_RESERVED_KEYS),
+                    self._extract_node_inputs(item, reserved_keys=self._CASE_RESERVED_KEYS),
                 ),
             )
             merged_expected = self._deep_merge(pipeline_expected, self._mapping(item.get("expected", {})))
@@ -255,6 +257,17 @@ class TestCaseLoader:
                 raise ValueError(f"inputs_by_node.{node_name} must be a mapping")
             normalized[str(node_name)] = deepcopy(node_payload)
         return normalized
+
+    def _extract_node_inputs(self, payload: object, *, reserved_keys: set[str]) -> dict[str, dict[str, Any]]:
+        if not isinstance(payload, dict):
+            return {}
+        explicit = self._normalize_inputs_by_node(payload.get("nodes", {}))
+        direct = self._extract_direct_node_inputs(payload, reserved_keys=reserved_keys)
+        overlap = sorted(set(explicit) & set(direct))
+        if overlap:
+            joined = ", ".join(overlap)
+            raise ValueError(f"duplicate node blocks defined in both nodes and direct mapping: {joined}")
+        return {**direct, **explicit}
 
     def _extract_direct_node_inputs(self, payload: object, *, reserved_keys: set[str]) -> dict[str, dict[str, Any]]:
         if not isinstance(payload, dict):

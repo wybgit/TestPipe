@@ -24,7 +24,6 @@ Fetch an ONNX model from git resources and compile it into OM through ATC.
 | --- | --- | --- | --- | --- |
 | model_path | artifact:path | yes | - | resolved onnx model path |
 | om_path | artifact:path | yes | - | compiled om artifact |
-| path_exists | bool | yes | - | compiled om existence |
 
 ### Nodes
 
@@ -50,19 +49,7 @@ Fetch an ONNX model from git resources and compile it into OM through ATC.
 - `model_path` <- `fetchModelNode.model_path`
 
 
-#### checkOmExistsNode
-
-- `op_name`: `PathExists`
-- `stage`: `assert`
-- `attrs`: `-`
-
-输入绑定：
-
-- `target_path` <- `compileModelNode.om_path`
-
-
 ### Output Bindings
 
 - `model_path` <- `fetchModelNode.model_path`
 - `om_path` <- `compileModelNode.om_path`
-- `path_exists` <- `checkOmExistsNode.path_exists`

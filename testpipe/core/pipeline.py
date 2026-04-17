@@ -41,14 +41,6 @@ class NodeHandle:
         return NodeOutputRef(node_name=self.name, output_name=port_name)
 
 
-@dataclass(slots=True)
-class EdgeDefinition:
-    source_node: str
-    source_port: str
-    target_node: str
-    target_port: str
-
-
 class Pipeline(ABC):
     """Pipeline DSL used to author execution graphs."""
 
@@ -60,7 +52,6 @@ class Pipeline(ABC):
         self.inputs: list[PortSpec] = []
         self.outputs: list[PortSpec] = []
         self.nodes: list[NodeDefinition] = []
-        self.edges: list[EdgeDefinition] = []
         self.output_bindings: list[OutputDefinition] = []
         self.current_stage: str | None = None
         self.define()
@@ -155,16 +146,6 @@ class Pipeline(ABC):
             binding = PipelineInputRef(source)
         target_node, target_port = target.split(".", 1)
         self._require_node(target_node).inputs[target_port] = binding
-        if isinstance(binding, PipelineInputRef):
-            return
-        self.edges.append(
-            EdgeDefinition(
-                source_node=binding.node_name,
-                source_port=binding.output_name,
-                target_node=target_node,
-                target_port=target_port,
-            )
-        )
 
     def _require_node(self, node_name: str) -> NodeDefinition:
         for node in self.nodes:

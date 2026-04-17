@@ -1,41 +1,26 @@
-# TestPipe 文档首页
+# TestPipe 文档
 
-TestPipe 当前采用统一的 Python DSL + `PipelineSpec` 执行模型。
+这套文档只描述当前仓库已经落地的实现，不展开未来平台规划。
 
-文档站点面向 Docsify 组织，建议从下面几个入口开始阅读。
+## 先看什么
 
-## 快速入口
+建议按这个顺序阅读：
 
-- [内置算子 API](api/ops_catalog.md)
-- [内置 Pipeline API](api/pipelines_catalog.md)
-- [Node API](api/node_api.md)
-- [Pipeline API](api/pipeline_api.md)
-- [Agent Skills 使用指南](guides/developer/03_Agent_Skills使用指南.md)
-- [Pipeline Python 实现](architecture/03_Pipeline_Python实现.md)
-- [Pipeline 可视化导出](architecture/05_Pipeline可视化导出.md)
-- [框架架构图](architecture/06_框架架构图.md)
-- [软件时序调用图](architecture/09_软件时序调用图.md)
-- [TestCase YAML 规范](architecture/04_TestCase_YAML规范.md)
+1. [总体设计](architecture/00_总体设计.md)
+2. [Pipeline Python 实现](architecture/03_Pipeline_Python实现.md)
+3. [TestCase YAML 规范](architecture/04_TestCase_YAML规范.md)
+4. [Pipeline API](api/pipeline_api.md)
+5. [Node API](api/node_api.md)
 
-## 当前框架结论
+## 当前结论
 
-- `testpipe/core/pipeline.py` 是 Pipeline DSL 的唯一实现。
-- Pipeline 通过 `define()` 构图，核心 API 是 `add_input`、`add_node`、`add_output`。
-- Node 输入来源统一分为 Pipeline 输入或上游节点输出。
-- 算子属性与节点输入明确分离：`inputs` 表示图上流转的值，`attrs` 表示算子默认值，可在 testcase 中按节点做在线覆盖。
-- `CaseSpec.inputs` 只承载 Pipeline 输入，`CaseSpec.inputs_by_node` 用于节点输入补充和属性在线覆盖。
-- 当前示例保留的主流程是 `OnnxGitAtcPipeline`。
-- Pipeline 执行和显式导出都支持生成 `.dot` 与 `.pdf` 图。
+- 当前稳定主线只有 `OnnxGitAtcPipeline`
+- Pipeline 默认只保留业务步骤
+- 简单结果检查优先写在 `expected`
+- 推荐 testcase 主格式是 `pipeline.nodes + cases[*].nodes`
+- `PipelineSpec` 是执行、导图和校验的统一输入
 
-## 文档目录
-
-### API
-
-- [API 总览](api/README.md)
-- [内置算子 API](api/ops_catalog.md)
-- [内置 Pipeline API](api/pipelines_catalog.md)
-- [Node API](api/node_api.md)
-- [Pipeline API](api/pipeline_api.md)
+## 文档分组
 
 ### 架构
 
@@ -45,28 +30,29 @@ TestPipe 当前采用统一的 Python DSL + `PipelineSpec` 执行模型。
 - [Pipeline Python 实现](architecture/03_Pipeline_Python实现.md)
 - [TestCase YAML 规范](architecture/04_TestCase_YAML规范.md)
 - [Pipeline 可视化导出](architecture/05_Pipeline可视化导出.md)
-- [框架架构图](architecture/06_框架架构图.md)
 - [核心对象模型设计](architecture/07_核心对象模型设计.md)
 - [执行与追踪机制设计](architecture/08_执行与追踪机制设计.md)
-- [软件时序调用图](architecture/09_软件时序调用图.md)
 
-### 开发指南
+### API
 
-- [开发总览](guides/developer/00_开发总览.md)
-- [自定义测试算子](guides/developer/01_自定义测试算子.md)
-- [自定义 API 与 Action 扩展](guides/developer/02_自定义API与Action扩展.md)
-- [Agent Skills 使用指南](guides/developer/03_Agent_Skills使用指南.md)
+- [API 总览](api/README.md)
+- [Pipeline API](api/pipeline_api.md)
+- [Node API](api/node_api.md)
+- [内置算子 API](api/ops_catalog.md)
+- [内置 Pipeline API](api/pipelines_catalog.md)
 
-### 需求说明
+### 需求
 
 - [原始需求](requirements/00_原始需求.md)
 - [测试场景](requirements/01_测试场景.md)
 - [软件需求说明书](requirements/02_软件需求说明书.md)
 
-## Docsify 本地预览
+### 记录
+
+- [版本迭代日志](changelog/README.md)
+
+## 本地预览
 
 ```bash
 npx docsify-cli serve docs
 ```
-
-打开 `http://localhost:3000` 即可预览文档站点。

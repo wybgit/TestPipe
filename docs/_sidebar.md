@@ -19,6 +19,10 @@
   - [执行与追踪机制设计](/architecture/08_执行与追踪机制设计.md)
   - [软件时序调用图](/architecture/09_软件时序调用图.md)
 
+- 版本迭代
+  - [日志首页](/changelog/README.md)
+  - [2026-04-17 工程优化记录](/changelog/2026-04-17_工程优化记录.md)
+
 - 开发指南
   - [开发总览](/guides/developer/00_开发总览.md)
   - [自定义测试算子](/guides/developer/01_自定义测试算子.md)

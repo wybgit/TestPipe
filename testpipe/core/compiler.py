@@ -122,6 +122,6 @@ class PipelineCompiler:
             edges=edges,
             output_bindings=output_bindings,
             metadata={
-                "stages": [node.stage for node in pipeline.nodes if node.stage],
+                "stages": list(dict.fromkeys(node.stage for node in pipeline.nodes if node.stage)),
             },
         )

@@ -71,18 +71,30 @@ class RuntimeCliTest(unittest.TestCase):
         return {
             "pipeline": {
                 "name": "OnnxGitAtcPipeline",
-                "fetchModelNode": {
-                    "repo": repo,
-                    "branch": "Abs",
-                    "path": "Abs_testcase_5a6b43",
-                    "model_pattern": "*.onnx",
-                },
-                "compileModelNode": {
-                    "env_script": env_script,
-                    "soc_version": "Ascend310P3",
+                "nodes": {
+                    "fetchModelNode": {
+                        "repo": repo,
+                        "branch": "Abs",
+                        "path": "Abs_testcase_5a6b43",
+                        "model_pattern": "*.onnx",
+                    },
+                    "compileModelNode": {
+                        "env_script": env_script,
+                        "soc_version": "Ascend310P3",
+                    },
                 },
             },
-            "cases": [{"case_id": case_id} for case_id in case_ids],
+            "cases": [
+                {
+                    "case_id": case_id,
+                    "expected": {
+                        "om_path": {
+                            "exists": True,
+                        }
+                    },
+                }
+                for case_id in case_ids
+            ],
         }
 
     def _write_case_file(self, root: Path, name: str, payload: dict[object, object]) -> Path:

@@ -277,6 +277,7 @@ class AtcMainlineFlowTest(unittest.TestCase):
                         "atc_options": {"precision_mode": "allow_fp32_to_fp16"},
                     },
                 },
+                expected={"om_path": {"exists": True}},
             )
             pipeline = create_pipeline(case.pipeline)
             pipeline_spec = PipelineCompiler().compile(pipeline)
@@ -288,7 +289,6 @@ class AtcMainlineFlowTest(unittest.TestCase):
             self.assertEqual(summary.status, "passed")
             self.assertTrue(Path(str(summary.outputs["model_path"])).exists())
             self.assertTrue(Path(str(summary.outputs["om_path"])).exists())
-            self.assertTrue(summary.outputs["path_exists"])
             run_dir = Path(str(summary.run_dir))
             dot_path = run_dir / "pipeline_graph.dot"
             pdf_path = run_dir / "pipeline_graph.pdf"
@@ -299,7 +299,7 @@ class AtcMainlineFlowTest(unittest.TestCase):
             self.assertIn("rankdir=TB", dot_text)
             self.assertIn("Ascend310P3", dot_text)
             self.assertIn("Abs_testcase_5a6b43", dot_text)
-            self.assertIn("path_exists", dot_text)
+            self.assertIn("om_path", dot_text)
             self.assertIn("INPUTS", dot_text)
             self.assertIn("PARAMS", dot_text)
             self.assertIn("COMMANDS", dot_text)

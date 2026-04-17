@@ -33,13 +33,15 @@ class TestCaseSuiteTest(unittest.TestCase):
             "cases": [
                 {
                     "case_id": "single_case",
-                    "fetchModelNode": {
-                        "repo": "repo_a",
-                        "branch": "main",
-                        "path": "model_a",
-                    },
-                    "compileModelNode": {
-                        "soc_version": "Ascend310P3",
+                    "nodes": {
+                        "fetchModelNode": {
+                            "repo": "repo_a",
+                            "branch": "main",
+                            "path": "model_a",
+                        },
+                        "compileModelNode": {
+                            "soc_version": "Ascend310P3",
+                        },
                     },
                 }
             ],
@@ -61,21 +63,25 @@ class TestCaseSuiteTest(unittest.TestCase):
                 {
                     "pipeline": {
                         "name": "OnnxGitAtcPipeline",
-                        "fetchModelNode": {
-                            "repo": "repo_a",
-                            "branch": "main",
-                            "path": "model_a",
+                        "nodes": {
+                            "fetchModelNode": {
+                                "repo": "repo_a",
+                                "branch": "main",
+                                "path": "model_a",
+                            },
+                            "compileModelNode": {"soc_version": "Ascend310P3"},
                         },
-                        "compileModelNode": {"soc_version": "Ascend310P3"},
                     },
                     "cases": [
                         {"case_id": "smoke_suite_default"},
                         {
                             "case_id": "smoke_suite_override",
-                            "fetchModelNode": {
-                                "repo": "repo_b",
-                                "branch": "main",
-                                "path": "model_b",
+                            "nodes": {
+                                "fetchModelNode": {
+                                    "repo": "repo_b",
+                                    "branch": "main",
+                                    "path": "model_b",
+                                },
                             },
                         },
                     ],
@@ -100,8 +106,7 @@ class TestCaseSuiteTest(unittest.TestCase):
                 {
                     "case_id": "bad_node_mapping",
                     "fetchModelNode": {"repo": "repo_a", "branch": "main", "path": "model_a"},
-                    "compileModelNode": {"soc_version": "Ascend310P3"},
-                    "checkOmExistsNode": {"target_path": "/tmp/override.om"},
+                    "compileModelNode": {"soc_version": "Ascend310P3", "model_path": "/tmp/override.onnx"},
                     "missing_node": {"message": "hello"},
                 }
             ],
@@ -111,7 +116,7 @@ class TestCaseSuiteTest(unittest.TestCase):
         report = CaseChecker().check(case, pipeline_spec)
         self.assertEqual(report.status, "fail")
         issue_fields = {issue.field for issue in report.issues}
-        self.assertIn("inputs_by_node.checkOmExistsNode.target_path", issue_fields)
+        self.assertIn("inputs_by_node.compileModelNode.model_path", issue_fields)
         self.assertIn("inputs_by_node.missing_node", issue_fields)
 
     def test_loader_rejects_duplicate_case_ids(self) -> None:

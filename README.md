@@ -1,341 +1,183 @@
 # TestPipe
 
-TestPipe 是一个基于 Pipeline 的测试编排框架，当前已打通最小主链路:
+TestPipe 是一个面向 NPU 测试场景的轻量编排框架。当前稳定主线是：
 
-- `YAML Case -> PipelineSpec -> TestEngine -> runs/`
-- 默认使用当前宿主机环境执行
-- SSH/SFTP 基础执行与传输命令层
-- 环境能力统一收敛到框架配置文件 `testpipe.config.yaml`
-- 默认输出精简结果，`--debug` 才输出定位文件
-- 模板/skill 驱动的生成、检查、执行、分析链路
+`YAML Case -> PipelineSpec -> TestEngine -> runs/`
 
-## 快速上手
+当前仓库刻意收敛到最小可用模型：
 
-### 1. 环境要求
+- `Pipeline` 只描述业务步骤
+- `TestOp` 只描述单步能力
+- `TestEngine` 是唯一执行入口
+- 简单结果检查优先写在 `expected`
+
+## 当前范围
+
+当前内置主线只有一个：
+
+- `OnnxGitAtcPipeline`
+
+流程：
+
+1. `fetchModelNode` 从 Git 获取模型资源
+2. `compileModelNode` 调用 `atc` 生成 `.om`
+3. `expected` 对最终输出做检查
+
+这意味着当前仓库更像一个“已打通主链路的框架骨架”，不是完整测试平台。
+
+## 安装
+
+要求：
 
 - Python `3.11+`
 
-### 2. 安装
-
-在仓库根目录执行:
+安装：
 
 ```bash
 pip install -e .
 ```
 
-### 3. 查看内置 Pipeline
+查看内置 Pipeline：
 
 ```bash
 testpipe list-pipelines
 ```
 
-当前最小示例会返回:
+## 快速开始
 
-```text
-OnnxGitAtcPipeline
-```
-
-### 4. 运行示例用例
-
-当前 `examples/testcases/` 目录只保留一个主线案例，从 Git 仓拉取 ONNX 并通过 CANN `atc` 转换成 `om`:
+运行示例：
 
 ```bash
 testpipe run examples/testcases/onnx_git_atc.yaml
 ```
 
-默认会直接使用仓库根目录 `testpipe.config.yaml` 中的默认环境，也就是当前宿主机本地环境。
-
-该样例会走 `ResourceFetch(git_dir) -> ATCCompile -> PathExists`。其中：
-
-- `ResourceFetch` 只接收 `repo / branch / path` 作为输入，`model_pattern` 作为属性，输出匹配到的模型文件路径。
-- `ATCCompile` 只接收 `model_path` 作为输入，`soc_version / env_script / atc_options / output_name` 都作为属性，支持默认离线值和用例在线覆盖。
-
-`ATCCompile` 会先执行:
+校验用例：
 
 ```bash
-source /home/wyb/Ascend/cann-8.5.0/set_env.sh
+testpipe check-case examples/testcases/onnx_git_atc.yaml --json
 ```
 
-随后调用 `atc` 完成 ONNX 到 OM 的真实转换，核心命令形态为:
+导出流程图：
 
 ```bash
-atc --model=./Abs_testcase_5a6b43.onnx --framework=5 --output=Abs_testcase_5a6b43 --soc_version=Ascend310P3
+testpipe export-pipeline-graph examples/testcases/onnx_git_atc.yaml --json
 ```
 
-其中 `atc_options` 只用于追加额外参数，不会覆盖这 4 个保留主参数。
+## 推荐 YAML 格式
 
-如果需要传入额外的 `atc` 参数，可以在 `compileModelNode` 中追加:
+推荐把节点参数统一写进 `nodes`，把简单断言写进 `expected`。
 
 ```yaml
 pipeline:
   name: OnnxGitAtcPipeline
-  compileModelNode:
-    atc_options:
-      precision_mode: allow_fp32_to_fp16
-      input_format: NCHW
-      dynamic_batch_size: "1,4,8"
+  nodes:
+    fetchModelNode:
+      repo: https://github.com/wybgit/onnx-layer.git
+      branch: Abs
+      path: Abs_testcase_5a6b43
+      model_pattern: "*.onnx"
+    compileModelNode:
+      env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
+      soc_version: Ascend310P3
+
 cases:
   - case_id: onnx_git_atc_case
-    name: OnnxGitAtcPipeline_Basic
+    description: 验证从 Git 仓获取 ONNX 并成功完成 ATC 转换
+    level: P0
+    expected:
+      om_path:
+        exists: true
 ```
 
-这些参数会被转换为:
+规则：
 
-```bash
---precision_mode=allow_fp32_to_fp16 --input_format=NCHW --dynamic_batch_size=1,4,8
-```
+- `pipeline.name` 必填
+- `pipeline.nodes` 放通用节点参数
+- `cases[*].nodes` 放单 case 覆盖参数
+- `expected` 用于简单结果检查
+- 旧格式仍兼容，但不建议继续新增
 
-保留参数 `model / framework / output / soc_version` 不允许通过 `atc_options` 覆盖。
+## 参数约定
 
-环境配置现在建议统一写入框架配置文件 `testpipe.config.yaml`。默认行为:
+当前实现只保留两类节点参数：
 
-- 不传 `--env-profile` 时，使用配置文件中的 `default_env`
-- 仓库默认 `default_env=local`，即当前宿主机环境
-- `ssh / docker / conda` 等扩展环境必须先在配置文件中声明并 `enabled: true`
+- `inputs`：图里流转的值
+- `attrs`：节点行为参数或默认值
 
-例如默认 local:
+以主线为例：
 
-```bash
-testpipe run examples/testcases/onnx_git_atc.yaml --env-profile local
-```
+- `fetchModelNode.repo / branch / path` 是输入
+- `fetchModelNode.model_pattern` 是属性
+- `compileModelNode.model_path` 是输入
+- `compileModelNode.soc_version / env_script / atc_options / output_name / timeout / framework` 是属性
 
-如果需要显式指定其他配置文件，可以传入:
+如果某个值只是控制节点行为，不要提升成 Pipeline 级输入。
 
-```bash
-testpipe run examples/testcases/onnx_git_atc.yaml --config /path/to/testpipe.config.yaml --env-profile local
-```
+## 输出结果
 
-仓库默认提供的 [testpipe.config.yaml](/home/wyb/AscendCode/TestPipe/testpipe.config.yaml) 当前只保留最小环境集合:
-
-- `local`
-- `docker`，默认禁用
-- `ssh`，默认禁用
-
-其中扩展环境配置重点覆盖:
-
-- `device.remote_root`: 统一约束远端文件路径根目录
-- `device.workdir`: 统一约束远端命令执行目录
-- `device.ssh_options`: 透传到 `ssh/scp`
-- `device.connect_timeout`: 连接超时配置
-- `host.mode`: `local / conda / docker`
-- `host.conda_env`: conda 模式目标环境名
-- `host.docker_image`: docker 模式目标镜像
-
-### 5. 查看运行结果
-
-默认模式下，会在 `runs/` 下生成独立目录，主要包含:
-
-- `summary.json`
-- `execution.log`
-- `resources/` 里的用例资源和稳定产物
-- `steps/<step>/` 下的执行日志、执行结果和命令脚本
-- `device_fs/` 下的 mock device 工作空间产物（仅设备 mock 场景）
-
-典型结构:
+一次执行会生成独立 run 目录：
 
 ```text
 runs/
   onnx_git_atc_case_YYYYMMDD_HHMMSS/
     summary.json
     execution.log
+    pipeline_graph.dot
+    pipeline_graph.pdf
     resources/
     steps/
 ```
 
-默认执行时，控制台和 `execution.log` 都会显式记录每个阶段的:
+默认会保留：
 
-- 节点类型: `INPUT / EXEC / OUTPUT`
-- `INPUT` 节点显示输入信息
-- `EXEC` 节点显示 `I / B / O`
-- `OUTPUT` 节点显示 `O / CHECK`
-- 控制台末尾显示单独的 `SUMMARY` 面板
+- `summary.json`
+- `execution.log`
+- `steps/<step>/result.json`
+- `steps/<step>/command.sh`
+- `resources/`
 
-说明:
-
-- 日志会尽量只展示对定位问题和理解流程有帮助的核心信息
-- 终端如果安装了 `rich` 会使用彩色块状日志；`execution.log` 仍保持纯文本，便于检索和归档
-- 每个 step 目录下会保留 `command.sh / stdout.log / stderr.log / execution.log / result.json`
-
-### 6. Debug 模式
-
-如果需要排查问题，可以开启 `--debug`:
-
-```bash
-testpipe run examples/testcases/onnx_git_atc.yaml --debug
-```
-
-这时会额外输出:
+`--debug` 会额外输出：
 
 - `case_spec.yaml`
 - `pipeline_spec.json`
 - `env_profile.json`
 - `trace.json`
 - `reproduce.sh`
-- `steps/<step>/step.json`
-- `steps/<step>/stdout.log`
-- `steps/<step>/stderr.log`
 
-典型结构:
+## 环境配置
 
-```text
-runs/
-  smoke_case_YYYYMMDD_HHMMSS/
-    summary.json
-    case_spec.yaml
-    pipeline_spec.json
-    env_profile.json
-    trace.json
-    reproduce.sh
-    steps/
-```
+默认从仓库根目录的 `testpipe.config.yaml` 读取环境。
 
-说明:
+默认行为：
 
-- `steps/<step>/stdout.log` 和 `steps/<step>/stderr.log` 会按动作追加记录，不会被最后一条命令覆盖
-- 默认模式下也会保留 step 目录，便于复查每一步的命令、日志和结果
+- 不传 `--env-profile` 时使用 `default_env`
+- 仓库默认 `default_env=local`
+- `docker`、`ssh` 等扩展环境必须先在配置中启用
 
-### 7. 示例用例内容
-
-示例文件在 [onnx_git_atc.yaml](/home/wyb/AscendCode/TestPipe/examples/testcases/onnx_git_atc.yaml):
-
-```yaml
-pipeline:
-  name: OnnxGitAtcPipeline
-  fetchModelNode:
-    repo: https://github.com/wybgit/onnx-layer.git
-    branch: Abs
-    path: Abs_testcase_5a6b43
-    model_pattern: "*.onnx"
-  compileModelNode:
-    env_script: /home/wyb/Ascend/cann-8.5.0/set_env.sh
-    soc_version: Ascend310P3
-cases:
-  - case_id: onnx_git_atc_case
-    description: 验证从Git仓获取ONNX并成功完成ATC转换
-    level: P0
-```
-
-统一格式下，顶层只保留两部分:
-
-- `pipeline`: 声明目标 pipeline 名称和通用节点参数
-- `cases`: 只声明 case 信息和差异化节点参数覆盖
-
-每个节点配置都直接写成 `节点名: {输入参数k-v}`。通用参数写在 `pipeline` 段，对单个 case 的差异化覆盖写在 `cases[*]` 里。同名节点参数会按 case 覆盖 pipeline 默认值。
-
-说明:
-
-- `pipeline.name` 必填，表示当前文件绑定的目标 Pipeline
-- `pipeline` 下除 `name` 外，其余字段直接写节点名
-- `cases` 里 `case_id` 必填，且在当前 YAML 文件内必须唯一
-- `cases[*]` 支持用例级字段: `description`、`level`
-- `cases[*]` 下除这些用例字段外，其余字段都直接写节点名
-- `fetchModelNode.path` 可以是 Git 仓内目录，也可以是单个文件路径
-- `fetchModelNode.path` 为目录时下载该目录内容，为文件时只下载该文件
-- 节点输入会直接注入对应节点，不再要求先声明成 Pipeline 顶层输入
-- 如果某个端口已经由上游边连接驱动，就不应该再在用例里手动赋值
-- 当前示例节点命名统一推荐使用 `*Node` 后缀，Pipeline 命名统一使用 `*Pipeline` 后缀
-- 旧格式 `test_case` / `test_suite` 仍然兼容读取，但不再推荐继续新增
-
-### 8. Agent Skills 目录
-
-仓库根目录新增 `skills/` 目录，用于给 `OpenCode`、`Claude Code` 这类 AI 代码开发工具提供可直接读取的 agent skill 资产。
-
-当前内置 4 个面向外部 agent 的 skill:
-
-- `test_node`
-- `test_pipeline`
-- `test_case_generation`
-- `test_result_analysis`
-
-其中 `test_node` 和 `test_pipeline` 额外提供了脚手架脚本，便于 AI agent 先生成骨架再补全实现:
+示例：
 
 ```bash
-python skills/test_node/scripts/generate_scaffold.py --request /path/to/request.yaml --output-root .
-python skills/test_pipeline/scripts/generate_scaffold.py --request /path/to/request.yaml --output-root .
+testpipe run examples/testcases/onnx_git_atc.yaml --env-profile local
+testpipe run examples/testcases/onnx_git_atc.yaml --config /path/to/testpipe.config.yaml --env-profile local
 ```
 
-说明:
+## 当前设计原则
 
-- `skills/` 面向外部 AI 代码开发工具参考，当前是仓库内唯一保留的 skill 资产目录
-- `testpipe` CLI 已不再提供内置 `run-skill / show-skill / show-template` 调度入口
-- 推荐使用方式见 [docs/guides/developer/03_Agent_Skills使用指南.md](docs/guides/developer/03_Agent_Skills使用指南.md)
+- `PipelineSpec` 是执行真相源
+- `Pipeline` 只是构图 DSL
+- 所有副作用统一经过 `ActionRunner`
+- 简单断言优先写在 `expected`
+- 文档以“当前真实实现”为准，不以未来规划为准
 
-## 当前实现范围
+## 文档
 
-当前代码骨架已经具备:
+入口见 [docs/README.md](/home/wyb/AscendCode/TestPipe/docs/README.md)。
 
-- `Spec` 模型
-- `Pipeline` DSL 与编译器
-- `TestEngine`
-- `ActionRunner`
-- `TraceRecorder`
-- `ArtifactStore`
-- 内置 `OnnxGitAtcPipeline`
-- 仓库级 `skills/` agent 协作资产目录
-- 默认框架配置加载与命名环境解析
-- 兼容 legacy `EnvProfile` YAML/JSON 直载方式
-- `DeviceExecutor` / `TransferExecutor` 的 mock 模式
-- SSH/SFTP 命令构建、远端根目录约束、远端目录预创建
-- `transfer.put / transfer.get / device.exec` trace 记录
-- `ResourceFetch` 主线支持 Git 仓目录资源
-- `ATCCompile` 主线支持真实 `atc` 执行与 `extra atc options`
-- 当前内置主线算子保留 `ResourceFetch / ATCCompile / PathExists`
+重点文档：
 
-当前尚未完整接入:
-
-- 真实设备网络、权限、工具链差异下的案例验证
-- 更复杂的业务算子
-- Device 侧 Provider 与环境能力补全
-- 外部 AI 代理的间接集成约定
-
-## 基础开发状态
-
-当前可以认为“功能框架的基本开发内容”已经完成，范围包括:
-
-- 统一执行主链路
-- 基础 Host / mock-device / SSH-SFTP 运行骨架
-- 当前仅保留一个内置主线 Pipeline 和示例用例
-- 示例目录当前只保留 `onnx_git_atc.yaml`
-- normal/debug 双模式输出
-- 面向外部 AI 工具的 `skills/` 协作入口
-
-后续开发将优先围绕真实案例推进，不再继续单独扩张抽象层。
-
-## 常用命令
-
-```bash
-# 运行并输出调试文件
-testpipe run examples/testcases/onnx_git_atc.yaml --debug
-
-# 指定框架配置和命名环境
-testpipe run examples/testcases/onnx_git_atc.yaml --config testpipe.config.yaml --env-profile local
-
-# 运行 Git ONNX -> OM 主线案例，默认使用当前宿主机 local 环境
-testpipe run examples/testcases/onnx_git_atc.yaml
-
-# 执行前先检查用例和 Pipeline 契约是否匹配
-testpipe check-case examples/testcases/onnx_git_atc.yaml
-
-# 列出已注册 Pipeline
-testpipe list-pipelines
-
-# 用外部 agent skill 脚手架生成代码骨架
-python skills/test_node/scripts/generate_scaffold.py --request /path/to/request.yaml --output-root .
-python skills/test_pipeline/scripts/generate_scaffold.py --request /path/to/request.yaml --output-root .
-
-# 运行测试
-python3 -m unittest discover -s tests -v
-```
-
-## 文档入口
-
-完整设计文档见 [docs/README.md](/home/wyb/AscendCode/TestPipe/docs/README.md)。
-
-重点推荐:
-
-- [软件需求说明书](/home/wyb/AscendCode/TestPipe/docs/requirements/02_软件需求说明书.md)
-- [框架架构图](/home/wyb/AscendCode/TestPipe/docs/architecture/06_框架架构图.md)
-- [软件时序调用图](/home/wyb/AscendCode/TestPipe/docs/architecture/09_软件时序调用图.md)
-- [核心对象模型设计](/home/wyb/AscendCode/TestPipe/docs/architecture/07_核心对象模型设计.md)
-- [执行与追踪机制设计](/home/wyb/AscendCode/TestPipe/docs/architecture/08_执行与追踪机制设计.md)
-- [Agent Skills 使用指南](/home/wyb/AscendCode/TestPipe/docs/guides/developer/03_Agent_Skills使用指南.md)
+- [总体设计](/home/wyb/AscendCode/TestPipe/docs/architecture/00_总体设计.md)
+- [Pipeline Python 实现](/home/wyb/AscendCode/TestPipe/docs/architecture/03_Pipeline_Python实现.md)
+- [TestCase YAML 规范](/home/wyb/AscendCode/TestPipe/docs/architecture/04_TestCase_YAML规范.md)
+- [Pipeline API](/home/wyb/AscendCode/TestPipe/docs/api/pipeline_api.md)
+- [Node API](/home/wyb/AscendCode/TestPipe/docs/api/node_api.md)
+- [版本迭代日志](/home/wyb/AscendCode/TestPipe/docs/changelog/README.md)
